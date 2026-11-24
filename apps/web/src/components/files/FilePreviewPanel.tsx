@@ -1224,10 +1224,10 @@ function renderedToggleLabel(
 
 function initialExplorerOpen(): boolean {
   try {
-    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? true;
+    return getLocalStorageItem(FILE_EXPLORER_STORAGE_KEY, Schema.Boolean) ?? false;
   } catch (error) {
     console.error(error);
-    return true;
+    return false;
   }
 }
 

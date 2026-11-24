@@ -10,6 +10,10 @@ import type { ComposerHandleRef } from "../../composerHandleContext";
 import type { selectThreadTerminalUiState } from "../../terminalUiStateStore";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { useThreadTerminalActions } from "../terminal/useThreadTerminalActions";
+import {
+  useKnownTerminalSessions,
+  useThreadRunningTerminalIds,
+} from "../../state/terminalSessions";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabelsCopy";
 import {
   AuthTerminalReadScope,
@@ -17,6 +21,7 @@ import {
   type EnvironmentId,
   type ProjectScript,
   type ScopedThreadRef,
+  type ScopedProjectRef,
   type ThreadId,
 } from "@t3tools/contracts";
 import { projectScriptTerminalInput } from "@t3tools/shared/projectScripts";
@@ -65,6 +70,8 @@ export interface TerminalLaunchContext {
 }
 
 interface ChatTerminalActionsInput {
+  readonly drawerThreadRef?: ScopedThreadRef;
+  readonly drawerProjectRef?: ScopedProjectRef;
   readonly environmentId: EnvironmentId;
   readonly composerRef: ComposerHandleRef;
   readonly terminalUiState: ReturnType<typeof selectThreadTerminalUiState>;
@@ -73,11 +80,8 @@ interface ChatTerminalActionsInput {
   readonly activeThreadRef: ScopedThreadRef | null;
   readonly activeProject: EnvironmentProject | null;
   readonly activeRightPanelSurface: RightPanelSurface | null;
-  readonly runningTerminalIds: ReadonlyArray<string>;
-  readonly activeServerOrderedTerminalIds: ReadonlyArray<string>;
   readonly activeTerminalLabelsById: ReadonlyMap<string, string>;
   readonly panelTerminalIds: ReadonlySet<string>;
-  readonly canReuseTerminal: boolean;
   readonly gitCwd: string | null;
   readonly setTerminalUiLaunchContext: Dispatch<SetStateAction<TerminalLaunchContext | null>>;
   readonly setThreadError: ReturnType<typeof makeThreadErrorSetter>;
@@ -97,11 +101,8 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     activeThreadRef,
     activeProject,
     activeRightPanelSurface,
-    runningTerminalIds,
-    activeServerOrderedTerminalIds,
     activeTerminalLabelsById,
     panelTerminalIds,
-    canReuseTerminal,
     gitCwd,
     setTerminalUiLaunchContext,
     setThreadError,
@@ -122,6 +123,18 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   const storeNewTerminal = useTerminalUiStateStore((s) => s.newTerminal);
   const storeCloseTerminal = useTerminalUiStateStore((s) => s.closeTerminal);
   const terminalActions = useThreadTerminalActions(activeThreadRef);
+  const drawerThreadRef = input.drawerThreadRef ?? activeThreadRef;
+  const drawerTerminalActions = useThreadTerminalActions(drawerThreadRef, input.drawerProjectRef);
+  const drawerSessions = useKnownTerminalSessions({
+    environmentId: drawerThreadRef?.environmentId ?? null,
+    threadId: drawerThreadRef?.threadId ?? null,
+  });
+  const drawerRunningIds = useThreadRunningTerminalIds({
+    environmentId: drawerThreadRef?.environmentId ?? null,
+    threadId: drawerThreadRef?.threadId ?? null,
+  });
+  const drawerSessionIds = drawerSessions?.map((session) => session.target.terminalId) ?? [];
+  const drawerPanelIds = input.drawerProjectRef ? new Set<string>() : panelTerminalIds;
 
   const activeTerminalGroup =
     terminalUiState.terminalGroups.find(
@@ -139,13 +152,13 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
   };
   const addTerminalContextToDraftStable = useStableCallback(addTerminalContextToDraft);
   const setTerminalOpen = (open: boolean) => {
-    if (!activeThreadRef) return;
-    storeSetTerminalOpen(activeThreadRef, open);
-    focusActiveDrawerTerminal(activeThreadRef);
+    if (!drawerThreadRef) return;
+    storeSetTerminalOpen(drawerThreadRef, open);
+    focusActiveDrawerTerminal(drawerThreadRef);
   };
   const setTerminalOpenStable = useStableCallback(setTerminalOpen);
   const toggleTerminalVisibility = () => {
-    if (!activeThreadRef) return;
+    if (!drawerThreadRef) return;
     const nextOpen = !terminalUiState.terminalOpen;
     if (
       nextOpen &&
@@ -157,52 +170,52 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       // Server-created setup terminals exist before this client's drawer mounts.
       // Reuse them before allocating a shell from the still-empty UI state.
       // The server lists a closing terminal until its close finishes, which would end the reopen.
-      const closingIds = new Set(closingTerminalIds(activeThreadRef));
-      const isReusable = (id: string) => !panelTerminalIds.has(id) && !closingIds.has(id);
+      const closingIds = new Set(closingTerminalIds(drawerThreadRef));
+      const isReusable = (id: string) => !drawerPanelIds.has(id) && !closingIds.has(id);
       const existingTerminalId =
-        runningTerminalIds.find(isReusable) ?? activeServerOrderedTerminalIds.find(isReusable);
+        drawerRunningIds.find(isReusable) ?? drawerSessionIds.find(isReusable);
       if (existingTerminalId !== undefined) {
-        storeEnsureTerminal(activeThreadRef, existingTerminalId, { open: true, active: true });
-        focusActiveDrawerTerminal(activeThreadRef);
+        storeEnsureTerminal(drawerThreadRef, existingTerminalId, { open: true, active: true });
+        focusActiveDrawerTerminal(drawerThreadRef);
         return;
       }
-      void terminalActions.launchTerminal({
-        place: (terminalId) => storeEnsureTerminal(activeThreadRef, terminalId, { open: true }),
+      void drawerTerminalActions.launchTerminal({
+        place: (terminalId) => storeEnsureTerminal(drawerThreadRef, terminalId, { open: true }),
       })?.result;
-      focusActiveDrawerTerminal(activeThreadRef);
+      focusActiveDrawerTerminal(drawerThreadRef);
       return;
     }
     setTerminalOpen(nextOpen);
   };
   const toggleTerminalVisibilityStable = useStableCallback(toggleTerminalVisibility);
   const splitTerminal = (direction: "horizontal" | "vertical" = "horizontal") => {
-    if (!activeThreadRef || hasReachedSplitLimit) return;
-    const launched = terminalActions.launchTerminal({
+    if (!drawerThreadRef || hasReachedSplitLimit) return;
+    const launched = drawerTerminalActions.launchTerminal({
       place: (terminalId) =>
         direction === "vertical"
-          ? storeSplitTerminalVertical(activeThreadRef, terminalId)
-          : storeSplitTerminal(activeThreadRef, terminalId),
+          ? storeSplitTerminalVertical(drawerThreadRef, terminalId)
+          : storeSplitTerminal(drawerThreadRef, terminalId),
     });
     if (!launched) return;
-    focusTerminal(activeThreadRef, launched.terminalId);
+    focusTerminal(drawerThreadRef, launched.terminalId);
     void launched.result;
   };
   const splitTerminalStable = useStableCallback(splitTerminal);
   const createNewTerminal = () => {
-    if (!activeThreadRef) return;
-    const launched = terminalActions.launchTerminal({
-      place: (terminalId) => storeNewTerminal(activeThreadRef, terminalId),
+    if (!drawerThreadRef) return;
+    const launched = drawerTerminalActions.launchTerminal({
+      place: (terminalId) => storeNewTerminal(drawerThreadRef, terminalId),
     });
     if (!launched) return;
-    focusTerminal(activeThreadRef, launched.terminalId);
+    focusTerminal(drawerThreadRef, launched.terminalId);
     void launched.result;
   };
   const createNewTerminalStable = useStableCallback(createNewTerminal);
   const closeTerminal = (terminalId: string) => {
-    if (!hasTerminalWriteAccess() || !activeThreadRef) return;
-    terminalActions.closeTerminalSession(terminalId, activeThreadRef);
-    storeCloseTerminal(activeThreadRef, terminalId);
-    focusActiveDrawerTerminal(activeThreadRef);
+    if (!hasTerminalWriteAccess() || !drawerThreadRef) return;
+    drawerTerminalActions.closeTerminalSession(terminalId, drawerThreadRef);
+    storeCloseTerminal(drawerThreadRef, terminalId);
+    focusActiveDrawerTerminal(drawerThreadRef);
   };
   const runProjectScript = async (
     script: ProjectScript,
@@ -226,19 +239,17 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     const reusableTerminalId =
       script.stopOnSettle ||
       options?.preferNewTerminal ||
-      !canReuseTerminal ||
+      drawerSessions === null ||
       !readEnvironmentScope(environmentId, AuthTerminalReadScope)
         ? null
         : findReusableProjectScriptTerminal({
             // Server sessions cover drawer terminals this client has not opened yet, such as a
             // worktree setup shell; the helper drops the panel-owned ones.
-            drawerTerminalIds: [
-              ...new Set([...terminalUiState.terminalIds, ...activeServerOrderedTerminalIds]),
-            ],
+            drawerTerminalIds: [...new Set([...terminalUiState.terminalIds, ...drawerSessionIds])],
             activeTerminalId: terminalUiState.activeTerminalId,
-            panelTerminalIds,
-            runningTerminalIds,
-            closingTerminalIds: activeThreadRef ? closingTerminalIds(activeThreadRef) : [],
+            panelTerminalIds: drawerPanelIds,
+            runningTerminalIds: drawerRunningIds,
+            closingTerminalIds: drawerThreadRef ? closingTerminalIds(drawerThreadRef) : [],
           });
     const targetWorktreePath = options?.worktreePath ?? activeThread.worktreePath ?? null;
 
@@ -247,17 +258,17 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       cwd: targetCwd,
       worktreePath: targetWorktreePath,
     });
-    if (!activeThreadRef) {
+    if (!drawerThreadRef) {
       return;
     }
 
-    const launched = terminalActions.launchTerminal({
+    const launched = drawerTerminalActions.launchTerminal({
       // The drawer opens with the target already placed: opening it empty would claim
       // DEFAULT_THREAD_TERMINAL_ID, which a right-panel terminal may already own.
       place: (terminalId) =>
         reusableTerminalId === null
-          ? storeNewTerminal(activeThreadRef, terminalId)
-          : storeEnsureTerminal(activeThreadRef, terminalId, { open: true }),
+          ? storeNewTerminal(drawerThreadRef, terminalId)
+          : storeEnsureTerminal(drawerThreadRef, terminalId, { open: true }),
       ...(reusableTerminalId === null
         ? { size: { cols: SCRIPT_TERMINAL_COLS, rows: SCRIPT_TERMINAL_ROWS } }
         : { terminalId: reusableTerminalId }),
@@ -267,7 +278,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     });
     if (!launched) return;
     const targetTerminalId = launched.terminalId;
-    focusTerminal(activeThreadRef, targetTerminalId);
+    focusTerminal(drawerThreadRef, targetTerminalId);
     const openResult = await launched.result;
     if (openResult._tag === "Failure") {
       if (!isAtomCommandInterrupted(openResult)) {
@@ -281,7 +292,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
       return;
     }
 
-    const writeResult = await terminalActions.writeToTerminal(
+    const writeResult = await drawerTerminalActions.writeToTerminal(
       targetTerminalId,
       options?.shellHistory === "preserve"
         ? `${script.command}\r`
@@ -302,6 +313,7 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     if (
       script.autoOpenPreview &&
       script.previewUrl &&
+      activeThreadRef &&
       isPreviewAvailableFor(activeThreadRef.environmentId)
     ) {
       const previewResult = await openUrlInPreview({

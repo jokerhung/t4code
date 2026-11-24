@@ -3,6 +3,7 @@ import {
   type EnvironmentId,
   type ResolvedKeybindingsConfig,
   type ScopedThreadRef,
+  type ScopedProjectRef,
   type ThreadId,
 } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
@@ -41,6 +42,8 @@ interface TerminalLaunchLocationWithEnv {
 }
 
 interface PersistentThreadTerminalDrawerProps {
+  projectRef?: ScopedProjectRef | undefined;
+  fixedHeight?: number | undefined;
   threadRef: { environmentId: EnvironmentId; threadId: ThreadId };
   threadId: ThreadId;
   active: boolean;
@@ -55,6 +58,8 @@ interface PersistentThreadTerminalDrawerProps {
 }
 
 export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerminalDrawer({
+  projectRef: projectOverride,
+  fixedHeight,
   threadRef,
   threadId,
   active,
@@ -69,7 +74,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
 }: PersistentThreadTerminalDrawerProps) {
   const messages = useMessages();
   const canOperateTerminal = useEnvironmentScope(threadRef.environmentId, AuthTerminalOperateScope);
-  const terminalActions = useThreadTerminalActions(threadRef);
+  const terminalActions = useThreadTerminalActions(threadRef, projectOverride);
   const serverThread = useQuietThreadShell(threadRef);
   const draftThread = useComposerDraftStore((store) => store.getDraftThreadByRef(threadRef));
   const projectRef = serverThread
@@ -77,7 +82,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     : draftThread
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
-  const project = useProject(projectRef);
+  const project = useProject(projectOverride ?? projectRef);
   const terminalUiState = useTerminalUiStateStore((state) =>
     selectThreadTerminalUiState(state.terminalUiStateByThreadKey, threadRef),
   );
@@ -217,6 +222,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
           runtimeEnv={runtimeEnv}
           visible={visible}
           height={terminalUiState.terminalHeight}
+          fixedHeight={fixedHeight}
           composerHeight={composerHeight}
           // Known-session order is MRU and changes on focus; persisted store order keeps sidebar labels stable.
           terminalIds={canOperateTerminal ? terminalUiState.terminalIds : serverOrderedTerminalIds}

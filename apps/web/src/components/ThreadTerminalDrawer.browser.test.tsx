@@ -214,6 +214,7 @@ vi.mock("../hooks/useSettings", async () => {
 });
 
 function Drawer(props: {
+  fixedHeight?: number;
   threadRef: ScopedThreadRef;
   cwd?: string;
   onCloseTerminal: (terminalId: string, threadRef?: ScopedThreadRef) => void;
@@ -225,6 +226,7 @@ function Drawer(props: {
       threadId={props.threadRef.threadId}
       cwd={props.cwd ?? "/repo"}
       height={240}
+      fixedHeight={props.fixedHeight}
       terminalIds={["term-1"]}
       activeTerminalId="term-1"
       terminalGroups={[{ id: "group-1", terminalIds: ["term-1"] }]}
@@ -269,6 +271,16 @@ function setup(originalStatus: "starting" | "exited" = "exited") {
   useTerminalUiStateStore.setState(useTerminalUiStateStore.getInitialState());
   return { original, other };
 }
+
+it("uses the details dock height instead of the drawer's minimum height", async () => {
+  const { original } = setup();
+  await using screen = await render(
+    <Drawer threadRef={original} fixedHeight={160} onCloseTerminal={() => {}} />,
+  );
+  const drawer = screen.container.querySelector<HTMLElement>("[data-thread-terminal-drawer]")!;
+  expect(drawer.style.height).toContain("160px");
+  expect(drawer.querySelector(".cursor-row-resize")).toBeNull();
+});
 
 it("drops input until the shell runs instead of failing a write for every key", async () => {
   const { original } = setup("starting");

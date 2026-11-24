@@ -205,6 +205,25 @@ function panel(activeSurface: RightPanelSurface) {
   return <RightPanelTabs {...props} />;
 }
 
+it("reports the details dock height again when its content changes", async () => {
+  const onHeight = vi.fn();
+  const props = panel(BROWSER_SURFACE).props as RightPanelTabsProps;
+  const view = (height: number) => (
+    <div style={{ display: "flex", height: 400 }}>
+      <RightPanelTabs
+        {...props}
+        mode="embedded"
+        footer={<div style={{ height }}>Thread details</div>}
+        onFooterHeightChange={onHeight}
+      />
+    </div>
+  );
+  await using screen = await render(view(100));
+  await vi.waitFor(() => expect(onHeight).toHaveBeenLastCalledWith(101));
+  await screen.rerender(view(150));
+  await vi.waitFor(() => expect(onHeight).toHaveBeenLastCalledWith(151));
+});
+
 // Chromium focuses on an uncancelled mousedown and runs history back/forward on an
 // uncancelled button 3/4 mouseup.
 function releaseThumbButton(

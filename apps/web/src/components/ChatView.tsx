@@ -1,3 +1,4 @@
+import { projectTerminalRef } from "../projectTerminal";
 import { m } from "../i18n/messages";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { useGT, useMessages } from "gt-react";
@@ -263,7 +264,7 @@ import {
 import { type TerminalContextDraft } from "../lib/terminalContext";
 import { collectInlineContextIds } from "../lib/composerContextReferences";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
-import { useKnownTerminalSessions, useThreadRunningTerminalIds } from "../state/terminalSessions";
+import { useKnownTerminalSessions } from "../state/terminalSessions";
 import { useEnvironmentQueryRefresh } from "../state/query";
 import { revisionedQuery } from "../state/revisionedQuery";
 import { useEnvironmentScope } from "~/state/session";
@@ -803,8 +804,17 @@ export default function ChatView(props: ChatViewProps) {
   const setMultipleModelSelectionsStable = useStableCallback(setMultipleModelSelections);
   const feedbackUploadsInFlightRef = useRef(new Set<string>());
 
+  const terminalProject = serverThread ?? draftThread;
+  const terminalProjectRef = terminalProject
+    ? scopeProjectRef(terminalProject.environmentId, terminalProject.projectId)
+    : null;
+  const drawerTerminalRef = terminalProjectRef
+    ? projectTerminalRef(terminalProjectRef)
+    : routeThreadRef;
+  const drawerTerminalKey = scopedThreadKey(drawerTerminalRef);
+  const [detailsDockHeight, setDetailsDockHeight] = useState<number>();
   const terminalUiState = useTerminalUiStateStore((state) =>
-    selectThreadTerminalUiState(state.terminalUiStateByThreadKey, routeThreadRef),
+    selectThreadTerminalUiState(state.terminalUiStateByThreadKey, drawerTerminalRef),
   );
 
   const fallbackDraftProjectRef = draftThread
@@ -1069,10 +1079,6 @@ export default function ChatView(props: ChatViewProps) {
   const activeMessageCount = isServerThread
     ? Math.max(committedServerMessageIds.size, serverProjection?.messages.length ?? 0)
     : 0;
-  const runningTerminalIds = useThreadRunningTerminalIds({
-    environmentId: activeThread?.environmentId ?? null,
-    threadId: activeThreadId,
-  });
   const activeThreadKnownSessionsRaw = useKnownTerminalSessions({
     environmentId: activeThread?.environmentId ?? null,
     threadId: activeThreadId,
@@ -1085,9 +1091,6 @@ export default function ChatView(props: ChatViewProps) {
       (session) => session.target.threadId === activeThreadId,
     );
   })();
-  const activeServerOrderedTerminalIds = activeThreadKnownSessions.map(
-    (session) => session.target.terminalId,
-  );
   const activeTerminalLabelsById = (() => {
     const labels = new Map<string, string>();
     for (const session of activeThreadKnownSessions) {
@@ -1176,8 +1179,15 @@ export default function ChatView(props: ChatViewProps) {
       surface.kind === "terminal" ? surface.terminalIds : [],
     ),
   );
-  const canReuseTerminal = activeThreadKnownSessionsRaw !== null;
   const previewPanelOpen = activeRightPanelKind === "preview" && browserAvailable;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- initializes the persisted workspace panel when a thread is first opened on a wide screen
+  useEffect(() => {
+    if (embedded || prefersPlanSidebarSheet || !activeThreadRef) return;
+    const store = useRightPanelStore.getState();
+    if (store.byThreadKey[scopedThreadKey(activeThreadRef)] === undefined) {
+      store.open(activeThreadRef, "files");
+    }
+  }, [activeThreadRef, embedded, prefersPlanSidebarSheet]);
   const rightPanelOpen = rightPanelState.isOpen;
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
@@ -2056,6 +2066,8 @@ export default function ChatView(props: ChatViewProps) {
     toggleTerminalVisibilityStable,
     shortcuts: terminalShortcuts,
   } = useChatTerminalActions({
+    drawerThreadRef: drawerTerminalRef,
+    ...(terminalProjectRef ? { drawerProjectRef: terminalProjectRef } : {}),
     environmentId,
     composerRef,
     terminalUiState,
@@ -2064,11 +2076,8 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadRef,
     activeProject,
     activeRightPanelSurface,
-    runningTerminalIds,
-    activeServerOrderedTerminalIds,
     activeTerminalLabelsById,
     panelTerminalIds,
-    canReuseTerminal,
     gitCwd,
     setTerminalUiLaunchContext,
     setThreadError,
@@ -2100,7 +2109,7 @@ export default function ChatView(props: ChatViewProps) {
   );
   // Selects only the mode, so canvas resizes rerender the chat view only when the
   // card switches presentation.
-  const threadPanelPresentation = useStore(
+  const canvasThreadPanelPresentation = useStore(
     chatCanvasStore,
     (state) =>
       resolveChatCanvasModel({
@@ -2108,9 +2117,12 @@ export default function ChatView(props: ChatViewProps) {
         detailsCardMeasurement: state.detailsCardMeasurement,
         threadRef: activeThreadRef,
         preview: canvasPreview,
-        detailsCardInlineOpen: threadPanelInlineOpen,
+        detailsCardInlineOpen:
+          threadPanelInlineOpen && !(rightPanelPresent && !shouldUsePlanSidebarSheet),
       }).detailsCardMode,
   );
+  const threadPanelPresentation =
+    rightPanelPresent && !shouldUsePlanSidebarSheet ? "inline" : canvasThreadPanelPresentation;
   const threadPanelOpen = useRightPanelStore((state) =>
     selectThreadPanelOpen(
       state.threadPanelVisibilityByThreadKey,
@@ -2289,7 +2301,7 @@ export default function ChatView(props: ChatViewProps) {
   });
 
   useFocusComposerOnThreadOpen(
-    activeThreadRef,
+    terminalUiState.terminalOpen ? drawerTerminalRef : activeThreadRef,
     workspaceLayoutElement,
     !embedded,
     terminalUiState.terminalOpen,
@@ -3533,6 +3545,79 @@ export default function ChatView(props: ChatViewProps) {
     addFolders: addDroppedFoldersToComposer,
   });
 
+  const threadDetailsPanel = embedded ? null : (
+    <ThreadDetailsPanel
+      docked={rightPanelPresent && !shouldUsePlanSidebarSheet}
+      anchor={threadPanelPopoverAnchorRef}
+      handle={threadPanelPopoverHandle}
+      forceNewWorktree={multipleModelSelections !== null}
+      environmentId={activeThread.environmentId}
+      threadId={activeThread.id}
+      projectId={activeThread.projectId}
+      worktreePath={activeThread.worktreePath}
+      isServerThread={isServerThread}
+      {...(draftId ? { draftId } : {})}
+      composerDraftTarget={composerDraftTarget}
+      activeProjectName={activeProject?.title}
+      activeProjectScripts={activeProject ? activeProjectScripts : undefined}
+      preferredScriptId={
+        activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
+      }
+      keybindings={keybindings}
+      availableEditors={availableEditors}
+      showOpenInPicker={showOpenInPicker}
+      openInShortcutEnabled={
+        !(
+          rightPanelOpen &&
+          renderedRightPanelSurface?.kind === "file" &&
+          renderedRightPanelSurface.attachment === undefined
+        )
+      }
+      gitCwd={gitCwd}
+      workspaceMutationId={workspaceRevision.revision}
+      isGitRepo={isGitRepo}
+      offersWorkspaceModes={workspaceModesOffered}
+      envLocked={envLocked}
+      availableEnvironments={logicalProjectEnvironments}
+      autoEnvironmentLabel={autoEnvironmentLabel}
+      onAutoEnvironment={
+        draftId &&
+        !envLocked &&
+        canAutoBalanceEnvironments &&
+        loadBalancingSettings.loadBalancingEnabled
+          ? onAutoEnvironmentStable
+          : undefined
+      }
+      {...(canChangeEnvironment ? { onEnvironmentChange: onEnvironmentChangeStable } : {})}
+      onEnvModeChange={onEnvModeChangeStable}
+      envMode={envMode}
+      {...(canOverrideServerThreadEnvMode
+        ? {
+            activeThreadBranchOverride: activeThreadBranch,
+            onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
+          }
+        : {})}
+      startFromOrigin={startFromOrigin}
+      onStartFromOriginChange={onStartFromOriginChange}
+      {...(canCheckoutPullRequestIntoThread
+        ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
+        : {})}
+      onComposerFocusRequest={scheduleComposerFocusStable}
+      {...(isServerThread && isGitRepo ? { onOpenChanges: openChangesFromThreadPanelStable } : {})}
+      onRunProjectScript={runProjectScriptStable}
+      onAddProjectScript={saveProjectScriptStable}
+      onUpdateProjectScript={updateProjectScriptStable}
+      onDeleteProjectScript={deleteProjectScriptStable}
+      usage={{
+        providerInstanceId: activeProviderInstanceId,
+        model: activeUsageModel,
+        providers: providerStatuses,
+        sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
+        contextWindow: activeContextWindow,
+      }}
+    />
+  );
+
   const content = (
     <div
       ref={setWorkspaceLayoutElement}
@@ -3602,6 +3687,7 @@ export default function ChatView(props: ChatViewProps) {
 
         <div className="relative flex min-h-0 min-w-0 flex-1">
           <ThreadFindCanvas
+            detailsDocked={rightPanelPresent && !shouldUsePlanSidebarSheet}
             findOptions={{
               skills: timelineSkills,
               progressive: serverConfig?.threadFindProgressive === true,
@@ -4116,79 +4202,7 @@ export default function ChatView(props: ChatViewProps) {
                   onConfirm={handleSwitchCheckoutToThreadStable}
                 />
 
-                <ThreadDetailsPanel
-                  anchor={threadPanelPopoverAnchorRef}
-                  handle={threadPanelPopoverHandle}
-                  forceNewWorktree={multipleModelSelections !== null}
-                  environmentId={activeThread.environmentId}
-                  threadId={activeThread.id}
-                  projectId={activeThread.projectId}
-                  worktreePath={activeThread.worktreePath}
-                  isServerThread={isServerThread}
-                  {...(draftId ? { draftId } : {})}
-                  composerDraftTarget={composerDraftTarget}
-                  activeProjectName={activeProject?.title}
-                  activeProjectScripts={activeProject ? activeProjectScripts : undefined}
-                  preferredScriptId={
-                    activeProject ? (lastInvokedScriptByProjectId[activeProject.id] ?? null) : null
-                  }
-                  keybindings={keybindings}
-                  availableEditors={availableEditors}
-                  showOpenInPicker={showOpenInPicker}
-                  openInShortcutEnabled={
-                    !(
-                      rightPanelOpen &&
-                      renderedRightPanelSurface?.kind === "file" &&
-                      renderedRightPanelSurface.attachment === undefined
-                    )
-                  }
-                  gitCwd={gitCwd}
-                  workspaceMutationId={workspaceRevision.revision}
-                  isGitRepo={isGitRepo}
-                  offersWorkspaceModes={workspaceModesOffered}
-                  envLocked={envLocked}
-                  availableEnvironments={logicalProjectEnvironments}
-                  autoEnvironmentLabel={autoEnvironmentLabel}
-                  onAutoEnvironment={
-                    draftId &&
-                    !envLocked &&
-                    canAutoBalanceEnvironments &&
-                    loadBalancingSettings.loadBalancingEnabled
-                      ? onAutoEnvironmentStable
-                      : undefined
-                  }
-                  {...(canChangeEnvironment
-                    ? { onEnvironmentChange: onEnvironmentChangeStable }
-                    : {})}
-                  onEnvModeChange={onEnvModeChangeStable}
-                  envMode={envMode}
-                  {...(canOverrideServerThreadEnvMode
-                    ? {
-                        activeThreadBranchOverride: activeThreadBranch,
-                        onActiveThreadBranchOverrideChange: setPendingServerThreadBranch,
-                      }
-                    : {})}
-                  startFromOrigin={startFromOrigin}
-                  onStartFromOriginChange={onStartFromOriginChange}
-                  {...(canCheckoutPullRequestIntoThread
-                    ? { onCheckoutPullRequestRequest: openPullRequestDialogStable }
-                    : {})}
-                  onComposerFocusRequest={scheduleComposerFocusStable}
-                  {...(isServerThread && isGitRepo
-                    ? { onOpenChanges: openChangesFromThreadPanelStable }
-                    : {})}
-                  onRunProjectScript={runProjectScriptStable}
-                  onAddProjectScript={saveProjectScriptStable}
-                  onUpdateProjectScript={updateProjectScriptStable}
-                  onDeleteProjectScript={deleteProjectScriptStable}
-                  usage={{
-                    providerInstanceId: activeProviderInstanceId,
-                    model: activeUsageModel,
-                    providers: providerStatuses,
-                    sources: serverConfig?.usageLimitSources ?? EMPTY_USAGE_LIMIT_SOURCES,
-                    contextWindow: activeContextWindow,
-                  }}
-                />
+                {rightPanelPresent && !shouldUsePlanSidebarSheet ? null : threadDetailsPanel}
 
                 <PullRequestThreadDialogHost
                   threadKey={activeThreadKey}
@@ -4204,10 +4218,15 @@ export default function ChatView(props: ChatViewProps) {
 
         {embedded ? null : (
           <ChatTerminalDrawers
-            activeThreadKey={activeThreadKey}
+            activeThreadKey={drawerTerminalKey}
+            fixedHeight={detailsDockHeight}
             activeTerminalOpen={Boolean(terminalUiState.terminalOpen)}
             composerHeight={composerReservedHeight}
-            launchContext={activeTerminalLaunchContext ?? null}
+            launchContext={
+              activeProject
+                ? { cwd: activeProject.workspaceRoot, worktreePath: null }
+                : (activeTerminalLaunchContext ?? null)
+            }
             splitShortcutLabel={splitTerminalShortcutLabel ?? undefined}
             splitVerticalShortcutLabel={splitTerminalVerticalShortcutLabel ?? undefined}
             newShortcutLabel={newTerminalShortcutLabel ?? undefined}
@@ -4220,6 +4239,8 @@ export default function ChatView(props: ChatViewProps) {
 
       {rightPanelPresent && activeThreadRef && !embedded ? (
         <ChatRightPanel
+          onFooterHeightChange={setDetailsDockHeight}
+          footer={shouldUsePlanSidebarSheet ? null : threadDetailsPanel}
           sheet={shouldUsePlanSidebarSheet}
           workspaceLayoutElement={workspaceLayoutElement}
           widthStorageKey={`t3code:preview-panel-width:${activeThreadKey}`}

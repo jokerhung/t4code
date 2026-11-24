@@ -127,6 +127,8 @@ export interface RightPanelTabsProps {
   defaultWidth?: number;
   inlineSize?: PreviewPanelInlineSize;
   layoutControls?: ReactNode;
+  footer?: ReactNode;
+  onFooterHeightChange?: (height: number | undefined) => void;
   surfaces: readonly RightPanelSurface[];
   environmentId: EnvironmentId | null;
   activeSurfaceId: string | null;
@@ -1132,6 +1134,21 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
   const [renamingDevice, setRenamingDevice] = useState<string | null>(null);
+  const [footerElement, setFooterElement] = useState<HTMLDivElement | null>(null);
+  const onFooterHeightChange = props.onFooterHeightChange;
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- reports the measured details dock height so the adjacent terminal can align with it
+  useEffect(() => {
+    if (!footerElement || !onFooterHeightChange) return;
+    const update = () => {
+      if (footerElement.offsetHeight > 1) onFooterHeightChange(footerElement.offsetHeight);
+    };
+    update();
+    const stop = observeResize(footerElement, update);
+    return () => {
+      stop();
+      onFooterHeightChange(undefined);
+    };
+  }, [footerElement, onFooterHeightChange]);
   const [addSurfaceMenuOpen, setAddSurfaceMenuOpen] = useState(false);
   const [tabScrollState, setTabScrollState] = useState({
     hasOverflow: false,
@@ -1712,6 +1729,15 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           props.children
         )}
       </div>
+      {props.footer ? (
+        <div
+          className="flex min-h-0 max-h-[45%] shrink-0 flex-col border-t"
+          data-thread-details-dock
+          ref={setFooterElement}
+        >
+          {props.footer}
+        </div>
+      ) : null}
     </PreviewPanelShell>
   );
 }

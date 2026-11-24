@@ -1233,6 +1233,7 @@ interface ThreadTerminalDrawerProps {
   runtimeEnv?: Record<string, string>;
   visible?: boolean;
   height: number;
+  fixedHeight?: number | undefined;
   /** Space the chat column keeps for the composer overlay; only read in drawer mode. */
   composerHeight?: number;
   terminalIds: string[];
@@ -1496,6 +1497,7 @@ export default function ThreadTerminalDrawer({
   runtimeEnv,
   visible = true,
   height,
+  fixedHeight,
   composerHeight = 0,
   terminalIds,
   activeTerminalId,
@@ -1529,7 +1531,7 @@ export default function ThreadTerminalDrawer({
   const drawerRef = useRef<HTMLElement | null>(null);
   const [drawerLayout, setDrawerLayout] = useState(() => readDrawerLayout(null));
   const maxDrawerHeight = resolveTerminalDrawerMaxHeight({ ...drawerLayout, composerHeight });
-  const drawerHeight = clampDrawerHeight(height, maxDrawerHeight);
+  const drawerHeight = fixedHeight ?? clampDrawerHeight(height, maxDrawerHeight);
   // A drag only writes the drawer's style; the store hears the height once, at
   // pointerup. The custom property outranks the rendered height while it is set.
   const resizeStateRef = useRef<{
@@ -1803,16 +1805,17 @@ export default function ThreadTerminalDrawer({
     };
   }, [isPanel, visible]);
 
-  const resizeHandle = isPanel ? null : (
-    <div
-      className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize touch-none any-pointer-coarse:h-4"
-      onPointerDown={handleResizePointerDown}
-      onPointerMove={handleResizePointerMove}
-      onPointerUp={handleResizePointerEnd}
-      onPointerCancel={handleResizePointerEnd}
-      onLostPointerCapture={handleResizePointerEnd}
-    />
-  );
+  const resizeHandle =
+    isPanel || fixedHeight !== undefined ? null : (
+      <div
+        className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-row-resize touch-none any-pointer-coarse:h-4"
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={handleResizePointerEnd}
+        onPointerCancel={handleResizePointerEnd}
+        onLostPointerCapture={handleResizePointerEnd}
+      />
+    );
 
   if (normalizedTerminalIds.length === 0) {
     return (

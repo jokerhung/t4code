@@ -51,7 +51,7 @@ import { Menu, MenuPopup } from "../ui/menu";
 
 interface ThreadDetailsPanelProps extends Pick<
   ComponentProps<typeof ThreadDetailsCard>,
-  "anchor" | "handle"
+  "anchor" | "handle" | "docked"
 > {
   forceNewWorktree?: boolean;
   environmentId: EnvironmentId;
@@ -157,6 +157,7 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
 
   return (
     <ThreadDetailsCard
+      docked={props.docked === true}
       threadRef={{ environmentId: props.environmentId, threadId: props.threadId }}
       anchor={props.anchor}
       handle={props.handle}

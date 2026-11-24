@@ -20,22 +20,60 @@ import {
 import { observeResize } from "../../lib/observeResize";
 import { requestWorkspaceFocus } from "../../lib/workspaceFocus";
 
-export function ThreadDetailsCard({
+type ThreadDetailsCardProps = {
+  threadRef: ScopedThreadRef;
+  anchor: RefObject<Element | null>;
+  handle: ReturnType<typeof PopoverCreateHandle>;
+  contentKey: string;
+  docked?: boolean;
+  onContextMenu?: MouseEventHandler<HTMLDivElement>;
+  children: (density: "full" | "compact" | "essential") => ReactNode;
+};
+
+export function ThreadDetailsCard(props: ThreadDetailsCardProps) {
+  return props.docked ? (
+    <DockedThreadDetailsCard {...props} />
+  ) : (
+    <FloatingThreadDetailsCard {...props} />
+  );
+}
+
+function DockedThreadDetailsCard(props: ThreadDetailsCardProps) {
+  const gt = useGT();
+  const open = useRightPanelStore((state) =>
+    selectThreadPanelOpen(state.threadPanelVisibilityByThreadKey, props.threadRef, "inline"),
+  );
+  // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- clears a floating popup's persisted flag when its card moves into the dock
+  useLayoutEffect(() => {
+    const store = useRightPanelStore.getState();
+    if (selectThreadPanelOpen(store.threadPanelVisibilityByThreadKey, props.threadRef, "popover")) {
+      store.setThreadPanelOpen(props.threadRef, "popover", false);
+    }
+  }, [props.threadRef]);
+  if (!open) return null;
+  return (
+    <aside
+      {...workspaceAreaProps("details", 3, gt("Thread details"))}
+      data-workspace-focus-key={`details:${props.threadRef.environmentId}:${props.threadRef.threadId}`}
+      data-thread-details-panel="docked"
+      className="flex min-h-0 flex-col"
+      onContextMenu={props.onContextMenu}
+    >
+      <ScrollArea className="min-h-0">
+        <div data-thread-details-card>{props.children("full")}</div>
+      </ScrollArea>
+    </aside>
+  );
+}
+
+function FloatingThreadDetailsCard({
   threadRef,
   anchor,
   handle,
   contentKey,
   onContextMenu,
   children,
-}: {
-  threadRef: ScopedThreadRef;
-  anchor: RefObject<Element | null>;
-  handle: ReturnType<typeof PopoverCreateHandle>;
-  /** Changes when the set of rendered items changes, so cached heights are measured again. */
-  contentKey: string;
-  onContextMenu?: MouseEventHandler<HTMLDivElement>;
-  children: (density: "full" | "compact" | "essential") => ReactNode;
-}) {
+}: ThreadDetailsCardProps) {
   const gt = useGT();
   const detailsArea = workspaceAreaProps("details", 3, gt("Thread details"));
   const canvas = useChatCanvas();

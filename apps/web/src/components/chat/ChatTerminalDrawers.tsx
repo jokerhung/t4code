@@ -3,13 +3,15 @@ import {
   parseScopedThreadKey,
   scopedThreadKey,
   scopeThreadRef,
+  scopeProjectRef,
 } from "@t3tools/client-runtime/environment";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import type { TerminalContextSelection } from "../../lib/terminalContext";
 import { usePanelAnimationSettings, usePanelPresence } from "../../panelAnimations";
-import { useThreadRefs } from "../../state/entities";
+import { useProjects, useThreadRefs } from "../../state/entities";
+import { projectTerminalRef } from "../../projectTerminal";
 import { useTerminalUiStateStore } from "../../terminalUiStateStore";
 import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
@@ -21,6 +23,7 @@ import {
 } from "../PersistentThreadTerminals";
 
 interface ChatTerminalDrawersProps {
+  readonly fixedHeight?: number | undefined;
   readonly activeThreadKey: string | null;
   readonly activeTerminalOpen: boolean;
   readonly composerHeight: number;
@@ -49,6 +52,13 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
     ),
   );
   const serverThreadRefs = useThreadRefs();
+  const projects = useProjects();
+  const projectByTerminalKey = new Map(
+    projects.map((project) => [
+      scopedThreadKey(projectTerminalRef(scopeProjectRef(project.environmentId, project.id))),
+      project,
+    ]),
+  );
   const serverThreadKeys = serverThreadRefs.map(scopedThreadKey);
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
   const draftThreadKeys = Object.values(draftThreadsByThreadKey).map((draftThread) =>
@@ -65,7 +75,11 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
   );
   const [mountedTerminalThreadKeys, setMountedTerminalThreadKeys] = useState<string[]>([]);
   const existingOpenTerminalThreadKeys = (() => {
-    const existingThreadKeys = new Set<string>([...serverThreadKeys, ...draftThreadKeys]);
+    const existingThreadKeys = new Set<string>([
+      ...serverThreadKeys,
+      ...draftThreadKeys,
+      ...projectByTerminalKey.keys(),
+    ]);
     return openTerminalThreadKeys.filter((nextThreadKey) => existingThreadKeys.has(nextThreadKey));
   })();
   const reconciledMountedTerminalThreadKeys = reconcileMountedTerminalThreadIds({
@@ -91,6 +105,15 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
   return mountedTerminalThreadRefs.map(({ key: mountedThreadKey, threadRef: mountedThreadRef }) => (
     <PersistentThreadTerminalDrawer
       key={mountedThreadKey}
+      projectRef={
+        projectByTerminalKey.has(mountedThreadKey)
+          ? scopeProjectRef(
+              mountedThreadRef.environmentId,
+              projectByTerminalKey.get(mountedThreadKey)!.id,
+            )
+          : undefined
+      }
+      fixedHeight={mountedThreadKey === activeThreadKey ? props.fixedHeight : undefined}
       threadRef={mountedThreadRef}
       threadId={mountedThreadRef.threadId}
       active={mountedThreadKey === activeThreadKey}

@@ -100,6 +100,28 @@ function Card({
   );
 }
 
+it("shows docked details at full density and keeps the details toggle working", async () => {
+  using fixture = setup();
+  useRightPanelStore.getState().setThreadPanelOpen(threadA, "popover", true);
+  await using screen = await render(
+    <ThreadDetailsCard
+      threadRef={threadA}
+      anchor={fixture.anchor}
+      handle={fixture.handle}
+      contentKey="docked"
+      docked
+    >
+      {(density) => <p>Docked details: {density}</p>}
+    </ThreadDetailsCard>,
+  );
+  await expect.element(screen.getByText("Docked details: full")).toBeVisible();
+  expect(popoverOpen(threadA)).toBe(false);
+  await act(() => useRightPanelStore.getState().setThreadPanelOpen(threadA, "inline", false));
+  await expect.element(screen.getByText("Docked details: full")).not.toBeInTheDocument();
+  await act(() => useRightPanelStore.getState().setThreadPanelOpen(threadA, "inline", true));
+  await expect.element(screen.getByText("Docked details: full")).toBeVisible();
+});
+
 it("stays open once opened", async () => {
   using fixture = setup();
   await using _screen = await render(<Card threadRef={threadB} inline={false} fixture={fixture} />);

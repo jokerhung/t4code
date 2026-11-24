@@ -2,6 +2,7 @@ import {
   AuthTerminalOperateScope,
   AuthTerminalReadScope,
   type ScopedThreadRef,
+  type ScopedProjectRef,
 } from "@t3tools/contracts";
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isAtomCommandInterrupted } from "@t3tools/client-runtime/state/runtime";
@@ -26,7 +27,10 @@ export interface TerminalLaunchLocation {
 }
 
 /** Allocate terminal ids and launch locations centrally so all surfaces share one view of sessions. */
-export function useThreadTerminalActions(threadRef: ScopedThreadRef | null) {
+export function useThreadTerminalActions(
+  threadRef: ScopedThreadRef | null,
+  projectOverride?: ScopedProjectRef,
+) {
   const openTerminalCommand = useAtomCommand(terminalEnvironment.open, "terminal open");
   const writeTerminal = useAtomCommand(terminalEnvironment.write, "terminal write");
   const closeTerminalCommand = useAtomCommand(terminalEnvironment.close, "terminal close");
@@ -39,7 +43,7 @@ export function useThreadTerminalActions(threadRef: ScopedThreadRef | null) {
     : draftThread
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
-  const project = useProject(projectRef);
+  const project = useProject(projectOverride ?? projectRef);
   const threadWorktreePath = serverThread?.worktreePath ?? draftThread?.worktreePath ?? null;
   const knownSessions = useKnownTerminalSessions({
     environmentId: threadRef?.environmentId ?? null,

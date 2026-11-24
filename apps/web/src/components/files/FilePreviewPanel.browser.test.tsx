@@ -252,6 +252,24 @@ function deepActiveElement() {
 }
 
 describe("source file focus", () => {
+  it("opens a file without a second explorer by default and can reveal it on request", async () => {
+    using _settings = setup();
+    localStorage.removeItem("t3code.fileExplorerOpen");
+    state.file = {
+      relativePath: "notes.txt",
+      contents: "File content",
+      byteLength: 12,
+      truncated: false,
+    };
+    await using screen = await render(filePreview("notes.txt"));
+    await expect.element(screen.getByRole("button", { name: "Show file explorer" })).toBeVisible();
+    await expect
+      .element(screen.getByRole("separator", { name: "Resize file explorer" }))
+      .not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Show file explorer" }));
+    await expect.element(screen.getByRole("button", { name: "Hide file explorer" })).toBeVisible();
+  });
+
   it("hands panel focus to the file's editor, which owns mod+f", async () => {
     using _settings = setup();
     const style = document.createElement("style");
