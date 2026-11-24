@@ -547,10 +547,7 @@ describe("sidebar settled pagination", () => {
         <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
       </SidebarProvider>,
     );
-    const shelf = screen.container.querySelector<HTMLElement>(
-      '[data-sidebar-row="shelf:settled"]',
-    )!;
-    if (shelf.getAttribute("aria-expanded") === "false") await act(() => shelf.click());
+    expect(screen.container.querySelector('[data-sidebar-row="shelf:settled"]')).toBeNull();
     const more = screen.getByRole("button", { name: "Show 25 more", exact: true });
     await expect.element(more).toBeInTheDocument();
     const moreButton = more.element() as HTMLButtonElement;

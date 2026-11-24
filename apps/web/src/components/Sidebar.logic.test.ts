@@ -1673,7 +1673,7 @@ describe("sidebarFolderExpansionKeys", () => {
 });
 
 describe("groupSidebarThreadsByProject", () => {
-  it("puts each thread in its project's folder and drops empty projects unless kept", () => {
+  it("groups threads by project with newest projects and threads first, keeping empty projects on request", () => {
     const remoteEnvironmentId = EnvironmentId.make("environment-remote");
     const t3code = ProjectId.make("t3code");
     const t3codeRemote = ProjectId.make("t3code-remote");
@@ -1682,10 +1682,12 @@ describe("groupSidebarThreadsByProject", () => {
       id,
       environmentId,
       projectId,
+      createdAt: id === "b" ? "2026-03-09T12:00:00.000Z" : "2026-03-09T10:00:00.000Z",
     });
     const groups = [
       {
         projectKey: "t3code",
+        createdAt: "2026-03-09T12:00:00.000Z",
         memberProjectRefs: [
           { environmentId: localEnvironmentId, projectId: t3code },
           { environmentId: remoteEnvironmentId, projectId: t3codeRemote },
@@ -1693,10 +1695,12 @@ describe("groupSidebarThreadsByProject", () => {
       },
       {
         projectKey: "fleet",
+        createdAt: "2026-03-09T11:00:00.000Z",
         memberProjectRefs: [{ environmentId: localEnvironmentId, projectId: fleet }],
       },
       {
         projectKey: "notes",
+        createdAt: "2026-03-09T10:00:00.000Z",
         memberProjectRefs: [
           { environmentId: localEnvironmentId, projectId: ProjectId.make("notes") },
         ],
@@ -1709,20 +1713,20 @@ describe("groupSidebarThreadsByProject", () => {
       thread("b", remoteEnvironmentId, t3codeRemote),
     ];
     const summarize = (keepEmpty: (group: (typeof groups)[number]) => boolean) =>
-      groupSidebarThreadsByProject(groups, threads, keepEmpty).map((folder) => ({
+      groupSidebarThreadsByProject(groups.toReversed(), threads, keepEmpty).map((folder) => ({
         projectKey: folder.group.projectKey,
         threads: folder.threads.map((entry) => entry.id),
       }));
 
     expect(summarize(() => true)).toEqual([
-      { projectKey: "t3code", threads: ["a", "b"] },
+      { projectKey: "t3code", threads: ["b", "a"] },
       { projectKey: "fleet", threads: [] },
       { projectKey: "notes", threads: [] },
     ]);
-    expect(summarize(() => false)).toEqual([{ projectKey: "t3code", threads: ["a", "b"] }]);
+    expect(summarize(() => false)).toEqual([{ projectKey: "t3code", threads: ["b", "a"] }]);
     // A pinned project keeps its empty folder while other empty projects drop out.
     expect(summarize((group) => group.projectKey === "fleet")).toEqual([
-      { projectKey: "t3code", threads: ["a", "b"] },
+      { projectKey: "t3code", threads: ["b", "a"] },
       { projectKey: "fleet", threads: [] },
     ]);
   });
