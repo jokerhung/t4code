@@ -17,6 +17,7 @@ import {
   type AuthEnvironmentScope,
   type AuthGrantScope,
   type AuthPairingCredentialResult,
+  type AuthProjectVisibility,
   type AdvertisedEndpoint,
   type EnvironmentId,
 } from "@t3tools/contracts";
@@ -24,6 +25,7 @@ import {
   isAtomCommandInterrupted,
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
+import { isReadonlyArrayNonEmpty as isNonEmpty } from "effect/Array";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { cn } from "../../lib/utils";
@@ -76,6 +78,13 @@ import {
   isHostedAppPairingUrl,
   endpointShareHint,
 } from "./ConnectionsSettings.logic";
+import {
+  hasEmptyProjectSelection,
+  ProjectVisibilityControl,
+  ProjectVisibilityPicker,
+  useSupportsProjectVisibility,
+} from "./ProjectVisibility";
+import { EVERY_PROJECT } from "../../projectVisibility.logic";
 
 function AccessScopeSummary({
   scopes,
@@ -145,6 +154,8 @@ type PairingLinkListRowProps = {
   revokingPairingLinkId: string | null;
   onRevoke: (id: string) => void;
   canRevoke: boolean;
+  /** Set when the environment can limit the projects a device shows. */
+  visibilityEnvironmentId: EnvironmentId | null;
 };
 
 const PairingLinkListRow = memo(function PairingLinkListRow({
@@ -158,6 +169,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
   revokingPairingLinkId,
   onRevoke,
   canRevoke,
+  visibilityEnvironmentId,
 }: PairingLinkListRowProps) {
   const gt = useGT();
   const m = useMessages();
@@ -295,6 +307,17 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
             </Tooltip>
             <span aria-hidden> · </span>
             <AccessScopeSummary scopes={pairingLink.scopes} label={gt("Pairing link scopes")} />
+            {visibilityEnvironmentId !== null ? (
+              <>
+                <span aria-hidden> · </span>
+                <ProjectVisibilityControl
+                  environmentId={visibilityEnvironmentId}
+                  target={{ pairingLinkId: pairingLink.id }}
+                  value={pairingLink.projectVisibility}
+                  canEdit={canRevoke}
+                />
+              </>
+            ) : null}
           </p>
           {!credential ? (
             <p className="text-2xs text-muted-foreground/70">
@@ -507,6 +530,7 @@ type ConnectedClientListRowProps = {
   revokingClientSessionId: string | null;
   onRevokeSession: (sessionId: ServerClientSessionRecord["sessionId"]) => void;
   canRevoke: boolean;
+  visibilityEnvironmentId: EnvironmentId | null;
 };
 
 const ConnectedClientListRow = memo(function ConnectedClientListRow({
@@ -514,6 +538,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
   revokingClientSessionId,
   onRevokeSession,
   canRevoke,
+  visibilityEnvironmentId,
 }: ConnectedClientListRowProps) {
   const gt = useGT();
   const m = useMessages();
@@ -567,6 +592,17 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
               </>
             ) : null}
             <AccessScopeSummary scopes={clientSession.scopes} label={gt("Client scopes")} />
+            {visibilityEnvironmentId !== null ? (
+              <>
+                <span aria-hidden> · </span>
+                <ProjectVisibilityControl
+                  environmentId={visibilityEnvironmentId}
+                  target={{ sessionId: clientSession.sessionId }}
+                  value={clientSession.projectVisibility}
+                  canEdit={canRevoke}
+                />
+              </>
+            ) : null}
           </p>
         </div>
         <div className="flex w-full shrink-0 items-center gap-2 sm:w-auto sm:justify-end">
@@ -623,12 +659,16 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
   const terminalSelected = selectedScopes.includes(AuthTerminalOperateScope);
   const relayAdminSelected = selectedScopes.includes(AuthRelayConfigureScope);
   const [isCreatingPairingLink, setIsCreatingPairingLink] = useState(false);
+  const supportsProjectVisibility = useSupportsProjectVisibility(environmentId);
+  const [projectVisibility, setProjectVisibility] = useState<AuthProjectVisibility>(EVERY_PROJECT);
+  const missingProjects = supportsProjectVisibility && hasEmptyProjectSelection(projectVisibility);
 
   const handlePairingDialogOpenChange = (open: boolean) => {
     setDialogOpen(open);
     if (!open) {
       pairingDialogSessionRef.current += 1;
       setPairingLabel("");
+      setProjectVisibility(EVERY_PROJECT);
       setPairingScopes(
         AuthStandardClientScopes.filter((scope) => delegatableScopes.includes(scope)),
       );
@@ -638,6 +678,7 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
   const handleCreatePairingLink = async () => {
     if (
       selectedScopes.length === 0 ||
+      missingProjects ||
       !readEnvironmentScope(environmentId, AuthAccessWriteScope) ||
       !selectedScopes.every((scope) => readEnvironmentScope(environmentId, scope))
     )
@@ -647,7 +688,20 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
     const trimmedLabel = pairingLabel.trim();
     const result = await createPairingCredential({
       environmentId,
-      input: { ...(trimmedLabel ? { label: trimmedLabel } : {}), scopes: selectedScopes },
+      input: {
+        ...(trimmedLabel ? { label: trimmedLabel } : {}),
+        scopes: selectedScopes,
+        ...(supportsProjectVisibility &&
+        projectVisibility.mode === "selected" &&
+        isNonEmpty(projectVisibility.projectIds)
+          ? {
+              projectVisibility: {
+                mode: "selected" as const,
+                projectIds: projectVisibility.projectIds,
+              },
+            }
+          : {}),
+      },
     });
     if (result._tag === "Success") {
       onPairingLinkCreated(result.value);
@@ -736,6 +790,21 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
                 autoFocus
               />
             </label>
+            {supportsProjectVisibility ? (
+              <>
+                <ProjectVisibilityPicker
+                  environmentId={environmentId}
+                  value={projectVisibility}
+                  onChange={setProjectVisibility}
+                  disabled={isCreatingPairingLink}
+                />
+                {missingProjects ? (
+                  <p className="text-xs text-destructive">
+                    <T>Select at least one project.</T>
+                  </p>
+                ) : null}
+              </>
+            ) : null}
             <section className="space-y-3">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -837,7 +906,7 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
               <T>Cancel</T>
             </Button>
             <Button
-              disabled={isCreatingPairingLink || selectedScopes.length === 0}
+              disabled={isCreatingPairingLink || selectedScopes.length === 0 || missingProjects}
               onClick={() => void handleCreatePairingLink()}
             >
               {isCreatingPairingLink ? gt("Creating…") : gt("Create link")}
@@ -864,6 +933,7 @@ type PairingClientsListProps = {
   onRevokePairingLink: (id: string) => void;
   onRevokeClientSession: (sessionId: ServerClientSessionRecord["sessionId"]) => void;
   canRevoke: boolean;
+  environmentId: EnvironmentId | null;
 };
 
 export const PairingClientsList = memo(function PairingClientsList({
@@ -881,7 +951,10 @@ export const PairingClientsList = memo(function PairingClientsList({
   onRevokePairingLink,
   onRevokeClientSession,
   canRevoke,
+  environmentId,
 }: PairingClientsListProps) {
+  const supportsProjectVisibility = useSupportsProjectVisibility(environmentId);
+  const visibilityEnvironmentId = supportsProjectVisibility ? environmentId : null;
   return (
     <>
       {pairingLinks.map((pairingLink) => (
@@ -897,6 +970,7 @@ export const PairingClientsList = memo(function PairingClientsList({
           revokingPairingLinkId={revokingPairingLinkId}
           onRevoke={onRevokePairingLink}
           canRevoke={canRevoke}
+          visibilityEnvironmentId={visibilityEnvironmentId}
         />
       ))}
 
@@ -907,6 +981,7 @@ export const PairingClientsList = memo(function PairingClientsList({
           revokingClientSessionId={revokingClientSessionId}
           onRevokeSession={onRevokeClientSession}
           canRevoke={canRevoke}
+          visibilityEnvironmentId={visibilityEnvironmentId}
         />
       ))}
 

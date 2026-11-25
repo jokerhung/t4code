@@ -590,6 +590,20 @@ export const layer = HttpApiBuilder.group(
         ),
       )
       .handle(
+        "projectVisibility",
+        Effect.fn("environment.auth.projectVisibility")(
+          function* (args) {
+            yield* annotateEnvironmentRequest(args.endpoint.name);
+            yield* requireEnvironmentScope(AuthAccessWriteScope);
+            const updated = yield* serverAuth.updateProjectVisibility(args.payload);
+            return { updated };
+          },
+          Effect.catchIf(EnvironmentAuth.isServerAuthInternalError, (error) =>
+            failEnvironmentInternal("project_visibility_update_failed", error),
+          ),
+        ),
+      )
+      .handle(
         "revokeOtherClients",
         Effect.fn("environment.auth.revokeOtherClients")(
           function* (args) {

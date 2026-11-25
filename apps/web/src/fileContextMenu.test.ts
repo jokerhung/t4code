@@ -6,10 +6,20 @@ import type { RemoteOpenResolution } from "./remoteOpen";
 
 const state = vi.hoisted(() => ({
   remoteOpen: { state: { mode: "local-exec" }, isResolved: true } as RemoteOpenResolution,
+  canDownload: false,
+  download: vi.fn(async () => {}),
+  copyLink: vi.fn(async () => {}),
   openInEditor: vi.fn(async () => ({ _tag: "Success" })),
   openRemoteEditorUrl: vi.fn(async (_url: string) => true),
 }));
 
+vi.mock("./fileDownload", () => ({
+  useFileDownload: () => ({
+    canDownload: state.canDownload,
+    download: state.download,
+    copyLink: state.copyLink,
+  }),
+}));
 vi.mock("@effect/atom-react", () => ({
   useAtomValue: () => ({
     availableEditors: ["cursor", "file-manager"],
@@ -132,4 +142,22 @@ describe("useFileContextMenu", () => {
       input: { cwd: "/workspace/project/src/index.ts", editor: "file-manager" },
     });
   });
+});
+
+it("offers direct download and link copying for files but not folders", async () => {
+  state.canDownload = true;
+  try {
+    const menu = useFileContextMenu(BASE_TARGET.environmentId);
+    expect(menu.buildItems(BASE_TARGET).map((item) => item.id)).toContain("download");
+    expect(menu.buildItems(BASE_TARGET).map((item) => item.id)).toContain("copy-download-link");
+    expect(
+      menu.buildItems({ ...BASE_TARGET, isDirectory: true }).map((item) => item.id),
+    ).not.toContain("download");
+    await menu.activate("download", BASE_TARGET);
+    expect(state.download).toHaveBeenCalledWith(BASE_TARGET);
+    await menu.activate("copy-download-link", BASE_TARGET);
+    expect(state.copyLink).toHaveBeenCalledWith(BASE_TARGET);
+  } finally {
+    state.canDownload = false;
+  }
 });

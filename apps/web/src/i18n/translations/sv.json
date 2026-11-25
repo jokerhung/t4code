@@ -1346,6 +1346,13 @@
   "75b6d7c3bc9c72da": "Kunde inte öppna i {editor}",
   "415d9fed5542d278": "Kunde inte öppna filen",
   "1d1bbe5b700afe63": "Det gick inte att visa filen",
+  "5004547dc22a40db": "Ladda ned",
+  "283ca6094d71ee00": "Copy download link",
+  "68883cb3342998e5": "Återanslut till miljön och försök igen.",
+  "fd15f50f32d75b11": "Download link copied",
+  "35fbaff8b7b889d7": "This temporary link lets you download the file directly.",
+  "075d454a45aabc87": "Unable to download file",
+  "448735c0084132f5": "Försök igen.",
   "31dc19d033af2774": "Det gick inte att öppna länken.",
   "029d8d0201aed231": "Det gick inte att öppna Systeminställningar.",
   "9af3083226778d3c": "Open VSX returnerade felformaterad temainformation.",
@@ -1441,7 +1448,6 @@
   "b33ee2521fc7686e": "Förhandsvisning av planen är inte tillgänglig.",
   "b48540ebc8788b76": "ChatGPT-inloggningen kunde inte slutföras",
   "52e824623cffe356": "Gå tillbaka till leverantören och försök igen.",
-  "68883cb3342998e5": "Återanslut till miljön och försök igen.",
   "cb4b97318340b585": "Enhet",
   "d407926eb12273d6": "Användningsgränsen har nåtts",
   "81d48ad533f04c08": "Leverantörsfel",
@@ -1967,7 +1973,6 @@
   "8bf65a425f50d140": "Ljust",
   "d604bc5cf3386f00": "Mörkt",
   "4758dde317babc14": "Kunde inte spara temavalet",
-  "448735c0084132f5": "Försök igen.",
   "e1ef4197dc810bab": "För ljust läge",
   "002fa063deda988d": "För mörkt läge",
   "9c6962c66efa5668": "Ändra utseende",
@@ -2670,6 +2675,7 @@
   "fcaffe60c85338e2": "Kunde inte läsa in äldre trådar. Försök igen",
   "43acfc82011a8fc2": "{count, plural, one {Visa {count} till} other {Visa {count} till}}",
   "08ff4b5e32bc46b8": "Inga matchande projekt.",
+  "dfc1b00923b10bee": "Inga projekt är valda för den här enheten",
   "6392f9e0f61ae70c": "Inga projekt än",
   "19df05d390e2c3ae": "Visa alla projekt",
   "84fa7d3765db7e84": "Inga trådar än",
@@ -3212,10 +3218,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "på datorn som öppnade den här sidan"
-      ]
+      "c": [" ", "på datorn som öppnade den här sidan"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3227,10 +3230,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· den som kör den får den här åtkomsten"
-      ]
+      "c": [" ", "· den som kör den får den här åtkomsten"]
     }
   ],
   "c54cc9c75db9dc58": "Godkänn bara en inloggning som du själv precis har startat.",
@@ -3526,7 +3526,7 @@
   "0a6fbecab03f7ef3": "Inga matchande filer eller mappar.",
   "0e7b21ab11721ca7": "Inget matchande kommando.",
   "5ab455b91b4b59e6": "5-hour limit",
-  "7c26c5915da68332": "Weekly ? all models",
+  "67a60f4245f0a211": "Weekly · all models",
   "a78cd5e9ba29195c": "Resets at {time}",
   "c0c3aa756405c1df": "Återställs {time}",
   "9d2fc1003e82feb1": "Användning",
@@ -7698,6 +7698,7 @@
   "1565dfce5dec4b82": "Skapa parkopplingslänk",
   "b40e476b23c85e10": "Generera en engångslänk som en annan enhet kan använda för att parkoppla med den här backenden som auktoriserad klient.",
   "f9688fef8cc2ff10": "Klientetikett (valfritt)",
+  "4a159a7988821045": "Välj minst ett projekt.",
   "f65d50129cd76fd7": "Begränsa vad den parkopplade klienten kan göra.",
   "4e3d361728cb9b37": "Endast läsning",
   "e9b142be5c4b1e9a": "Välj minst en behörighet.",
@@ -9327,6 +9328,18 @@
   "3310e10f1efdc9bd": "Välj ikon",
   "65ccf4f8e049003e": "Välj ett projekt för att hantera dess namn, ikon, utcheckningar och åtgärder.",
   "067beea7d8f6e2c9": "Visa alla miljöer",
+  "02155a6c2ff34c49": "{count} valda",
+  "53f2b5cf86263a9b": "Länken har redan använts. Redigera enheten som parkopplades med den.",
+  "b8e70f9a8c35f493": "Enheten är inte längre parkopplad.",
+  "837998c5773b0f37": "Det gick inte att uppdatera vilka projekt som visas",
+  "c9650f8c03e56e70": "Redigera visade projekt: {summary}",
+  "2b7bc88266409180": "Projekt som visas på den här enheten",
+  "a97703cf2b121297": "Detta döljer bara projekt i sidofältet. Åtkomsten till dem blockeras inte.",
+  "a460f7c807eb8cc2": "Alla projekt, även nya",
+  "14ea81e95c62c0f1": "Endast valda projekt",
+  "4f113bb0bc732b3d": "Rensa",
+  "63c497019acd7780": "Visade projekt",
+  "5869c6e410ee77c0": "Välj vad den här enheten listar. Ändringen gäller utan ny parkoppling.",
   "1bf6da50131340d4": "Accentfärgens nyans",
   "21b0794e20eb46c4": "Anpassad hexadecimal accentfärg",
   "e69555836cf65e6d": "Ändra accentfärg för {provider}",
@@ -10227,7 +10240,6 @@
   "8c24e88e226fce57": "Installationen misslyckades.",
   "132b21b672824737": "Kunde inte söka efter uppdateringar",
   "d1c62f207937d80b": "Sökningen efter uppdateringar misslyckades.",
-  "5004547dc22a40db": "Ladda ned",
   "7d04c4f0bdb67741": "Uppdaterad",
   "943047215ad556d5": "Sök efter uppdateringar",
   "a474bef3f2ff5815": "Uppdatering tillgänglig.",

@@ -3,6 +3,7 @@ import type {
   AuthBrowserSessionResult,
   AuthClientMetadata,
   AuthConnectDeviceRequest,
+  AuthProjectVisibility,
   AuthEnvironmentScope,
   ServerAuthSessionMethod,
   AuthSessionId,
@@ -120,6 +121,7 @@ export interface ServerPairingLinkRecord {
   readonly createdAt: string;
   readonly expiresAt: string;
   readonly connectDeviceRequest?: AuthConnectDeviceRequest;
+  readonly projectVisibility?: AuthProjectVisibility;
 }
 
 export interface ServerClientSessionRecord {
@@ -133,6 +135,7 @@ export interface ServerClientSessionRecord {
   readonly lastConnectedAt: string | null;
   readonly connected: boolean;
   readonly current: boolean;
+  readonly projectVisibility?: AuthProjectVisibility;
 }
 
 type ServerAuthGateState =

@@ -1346,6 +1346,13 @@
   "75b6d7c3bc9c72da": "Impossible d’ouvrir dans {editor}",
   "415d9fed5542d278": "Impossible d’ouvrir le fichier",
   "1d1bbe5b700afe63": "Impossible d’afficher le fichier",
+  "5004547dc22a40db": "Télécharger",
+  "283ca6094d71ee00": "Copy download link",
+  "68883cb3342998e5": "Reconnectez-vous à l’environnement et réessayez.",
+  "fd15f50f32d75b11": "Download link copied",
+  "35fbaff8b7b889d7": "This temporary link lets you download the file directly.",
+  "075d454a45aabc87": "Unable to download file",
+  "448735c0084132f5": "Réessayez.",
   "31dc19d033af2774": "Impossible d’ouvrir le lien.",
   "029d8d0201aed231": "Impossible d’ouvrir les Réglages Système.",
   "9af3083226778d3c": "Open VSX a renvoyé des détails de thème mal formés.",
@@ -1441,7 +1448,6 @@
   "b33ee2521fc7686e": "Aperçu du plan indisponible.",
   "b48540ebc8788b76": "La connexion à ChatGPT n’a pas pu aboutir",
   "52e824623cffe356": "Revenez chez le fournisseur et réessayez.",
-  "68883cb3342998e5": "Reconnectez-vous à l’environnement et réessayez.",
   "cb4b97318340b585": "Appareil",
   "d407926eb12273d6": "Limite d’utilisation atteinte",
   "81d48ad533f04c08": "Erreur du fournisseur",
@@ -1967,7 +1973,6 @@
   "8bf65a425f50d140": "Clair",
   "d604bc5cf3386f00": "Sombre",
   "4758dde317babc14": "Impossible d’enregistrer le choix du thème",
-  "448735c0084132f5": "Réessayez.",
   "e1ef4197dc810bab": "Pour le mode clair",
   "002fa063deda988d": "Pour le mode sombre",
   "9c6962c66efa5668": "Changer l’apparence",
@@ -2670,6 +2675,7 @@
   "fcaffe60c85338e2": "Impossible de charger les fils plus anciens. Réessayer",
   "43acfc82011a8fc2": "{count, plural, one {Afficher {count} de plus} other {Afficher {count} de plus}}",
   "08ff4b5e32bc46b8": "Aucun projet correspondant.",
+  "dfc1b00923b10bee": "Aucun projet n’est sélectionné pour cet appareil",
   "6392f9e0f61ae70c": "Pas encore de projet",
   "19df05d390e2c3ae": "Afficher tous les projets",
   "84fa7d3765db7e84": "Aucun fil pour l’instant",
@@ -3212,10 +3218,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "sur l’ordinateur qui a ouvert cette page"
-      ]
+      "c": [" ", "sur l’ordinateur qui a ouvert cette page"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3227,10 +3230,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· quiconque l’exécute obtient cet accès"
-      ]
+      "c": [" ", "· quiconque l’exécute obtient cet accès"]
     }
   ],
   "c54cc9c75db9dc58": "N’approuvez qu’une connexion que vous venez de lancer.",
@@ -3526,7 +3526,7 @@
   "0a6fbecab03f7ef3": "Aucun fichier ni dossier correspondant.",
   "0e7b21ab11721ca7": "Aucune commande correspondante.",
   "5ab455b91b4b59e6": "5-hour limit",
-  "7c26c5915da68332": "Weekly ? all models",
+  "67a60f4245f0a211": "Weekly · all models",
   "a78cd5e9ba29195c": "Resets at {time}",
   "c0c3aa756405c1df": "Réinitialisation {time}",
   "9d2fc1003e82feb1": "Utilisation",
@@ -7693,6 +7693,7 @@
   "1565dfce5dec4b82": "Créer un lien d’appairage",
   "b40e476b23c85e10": "Générez un lien à usage unique qu’un autre appareil peut utiliser pour s’appairer avec ce backend en tant que client autorisé.",
   "f9688fef8cc2ff10": "Libellé du client (facultatif)",
+  "4a159a7988821045": "Sélectionnez au moins un projet.",
   "f65d50129cd76fd7": "Limitez ce que le client appairé peut faire.",
   "4e3d361728cb9b37": "Lecture seule",
   "e9b142be5c4b1e9a": "Sélectionnez au moins une autorisation.",
@@ -9321,6 +9322,18 @@
   "3310e10f1efdc9bd": "Choisir une icône",
   "65ccf4f8e049003e": "Choisissez un projet pour gérer son nom, son icône, ses checkouts et ses actions.",
   "067beea7d8f6e2c9": "Afficher tous les environnements",
+  "02155a6c2ff34c49": "{count} sélectionnés",
+  "53f2b5cf86263a9b": "Ce lien a déjà été utilisé. Modifiez l’appareil qu’il a associé.",
+  "b8e70f9a8c35f493": "Cet appareil n’est plus associé.",
+  "837998c5773b0f37": "Impossible de mettre à jour les projets affichés",
+  "c9650f8c03e56e70": "Modifier les projets affichés : {summary}",
+  "2b7bc88266409180": "Projets affichés sur cet appareil",
+  "a97703cf2b121297": "Cela masque seulement des projets dans la barre latérale. Leur accès n’est pas bloqué.",
+  "a460f7c807eb8cc2": "Tous les projets, y compris les nouveaux",
+  "14ea81e95c62c0f1": "Seulement les projets sélectionnés",
+  "4f113bb0bc732b3d": "Tout effacer",
+  "63c497019acd7780": "Projets affichés",
+  "5869c6e410ee77c0": "Choisissez ce que cet appareil affiche. La mise à jour ne demande pas de nouvelle association.",
   "1bf6da50131340d4": "Teinte de la couleur d’accent",
   "21b0794e20eb46c4": "Couleur d’accent hexadécimale personnalisée",
   "e69555836cf65e6d": "Changer la couleur d’accent de {provider}",
@@ -10219,7 +10232,6 @@
   "8c24e88e226fce57": "L’installation a échoué.",
   "132b21b672824737": "Impossible de rechercher des mises à jour",
   "d1c62f207937d80b": "La recherche de mises à jour a échoué.",
-  "5004547dc22a40db": "Télécharger",
   "7d04c4f0bdb67741": "À jour",
   "943047215ad556d5": "Rechercher des mises à jour",
   "a474bef3f2ff5815": "Mise à jour disponible.",

@@ -84,6 +84,9 @@ export function formatPairingCredentialList(
         id: credential.id,
         ...(credential.label ? { label: credential.label } : {}),
         scopes: credential.permissions ?? credential.scopes,
+        ...(credential.projectVisibility
+          ? { projectVisibility: credential.projectVisibility }
+          : {}),
         createdAt: toIsoString(credential.createdAt),
         expiresAt: toIsoString(credential.expiresAt),
       })),
@@ -102,6 +105,9 @@ export function formatPairingCredentialList(
         [
           `${credential.id}${credential.label ? ` (${credential.label})` : ""}`,
           `  scopes: ${(credential.permissions ?? credential.scopes).join(" ")}`,
+          ...(credential.projectVisibility?.mode === "selected"
+            ? [`  visible projects: ${credential.projectVisibility.projectIds.join(" ") || "none"}`]
+            : []),
           `  created: ${toIsoString(credential.createdAt)}`,
           `  expires: ${toIsoString(credential.expiresAt)}`,
         ].join(newline),

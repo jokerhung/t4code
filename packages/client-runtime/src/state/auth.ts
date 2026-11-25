@@ -7,6 +7,7 @@ import type {
   AuthCreatePairingCredentialInput,
   AuthRevokeClientSessionInput,
   AuthRevokePairingLinkInput,
+  AuthUpdateProjectVisibilityInput,
 } from "@t3tools/contracts";
 import { WS_METHODS } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
@@ -17,7 +18,11 @@ import { Atom } from "effect/reactivity";
 import type { EnvironmentRegistry } from "../connection/registry.ts";
 import { subscribe } from "../rpc/client.ts";
 import { executeConnectedEnvironmentHttpRequest } from "./environmentHttpAuth.ts";
-import { createEnvironmentCommand, createEnvironmentSubscriptionAtomFamily } from "./runtime.ts";
+import {
+  createEnvironmentCommand,
+  createEnvironmentRpcSubscriptionAtomFamily,
+  createEnvironmentSubscriptionAtomFamily,
+} from "./runtime.ts";
 
 const ACCESS_REQUEST_TIMEOUT_MS = 8_000;
 
@@ -156,6 +161,22 @@ export function createAuthEnvironmentAtoms<R, E>(
           timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
           request: ({ client, headers }) => client.revokeConnectDevice({ headers, payload: input }),
         }),
+    }),
+    updateProjectVisibility: createEnvironmentCommand(runtime, {
+      label: "environment-data:server:auth-update-project-visibility",
+      execute: (input: AuthUpdateProjectVisibilityInput) =>
+        executeConnectedEnvironmentHttpRequest({
+          group: "auth",
+          method: "POST",
+          url: (urls) => urls.projectVisibility(),
+          timeoutMs: ACCESS_REQUEST_TIMEOUT_MS,
+          request: ({ client, headers }) => client.projectVisibility({ headers, payload: input }),
+        }),
+    }),
+    /** This client's own sidebar projects. Only for servers with the capability. */
+    projectVisibility: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:auth-project-visibility",
+      tag: WS_METHODS.subscribeProjectVisibility,
     }),
     accessChanges: createEnvironmentSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:auth-access-changes",

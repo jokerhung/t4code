@@ -7,7 +7,11 @@ import * as Schema from "effect/Schema";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as SqlSchema from "effect/sql/SqlSchema";
 
-import { AuthClientMetadata, AuthEnvironmentScopes } from "@t3tools/contracts";
+import {
+  AuthClientMetadata,
+  AuthEnvironmentScopes,
+  AuthProjectVisibility,
+} from "@t3tools/contracts";
 
 import {
   type AuthPairingLinkRepositoryError,
@@ -15,6 +19,7 @@ import {
   type PersistenceErrorCorrelation,
   PersistenceSqlError,
 } from "./Errors.ts";
+import { readProjectVisibility } from "./projectVisibility.ts";
 
 /**
  * These subjects are reserved for one kind and level of MCP authorization.
@@ -41,6 +46,7 @@ export const AuthPairingLinkRecord = Schema.Struct({
   requiresConnectApproval: SqliteFlag,
   connectApproved: SqliteFlag,
   requestedClient: Schema.NullOr(Schema.fromJsonString(AuthClientMetadata)),
+  projectVisibility: Schema.NullOr(Schema.toType(AuthProjectVisibility)),
 });
 export type AuthPairingLinkRecord = typeof AuthPairingLinkRecord.Type;
 
@@ -55,6 +61,8 @@ export const CreateAuthPairingLinkInput = Schema.Struct({
   requiresConnectApproval: Schema.optionalKey(Schema.Boolean),
   createdAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
+  /** Stored form from `encodeProjectVisibility`; absent or null shows every project. */
+  projectVisibility: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type CreateAuthPairingLinkInput = typeof CreateAuthPairingLinkInput.Type;
 
@@ -116,6 +124,14 @@ export const RecordConnectRequestClientInput = Schema.Struct({
 });
 export type RecordConnectRequestClientInput = typeof RecordConnectRequestClientInput.Type;
 
+export const SetAuthPairingLinkProjectVisibilityInput = Schema.Struct({
+  id: Schema.String,
+  projectVisibility: Schema.NullOr(Schema.String),
+  now: Schema.DateTimeUtcFromString,
+});
+export type SetAuthPairingLinkProjectVisibilityInput =
+  typeof SetAuthPairingLinkProjectVisibilityInput.Type;
+
 const AuthPairingLinkRawDbRow = Schema.Struct({
   id: Schema.String,
   credential: Schema.Unknown,
@@ -131,9 +147,16 @@ const AuthPairingLinkRawDbRow = Schema.Struct({
   requiresConnectApproval: Schema.Unknown,
   connectApproved: Schema.Unknown,
   requestedClient: Schema.Unknown,
+  projectVisibility: Schema.Unknown,
 });
 
-const decodeAuthPairingLinkDbRow = Schema.decodeUnknownEffect(AuthPairingLinkRecord);
+const decodeAuthPairingLinkRecord = Schema.decodeUnknownEffect(AuthPairingLinkRecord);
+const decodeAuthPairingLinkDbRow = (row: typeof AuthPairingLinkRawDbRow.Type) =>
+  readProjectVisibility(row.projectVisibility).pipe(
+    Effect.flatMap((projectVisibility) =>
+      decodeAuthPairingLinkRecord({ ...row, projectVisibility }),
+    ),
+  );
 
 export class AuthPairingLinkRepository extends Context.Service<
   AuthPairingLinkRepository,
@@ -167,6 +190,10 @@ export class AuthPairingLinkRepository extends Context.Service<
     readonly revokeUnspentByProofKey: (
       input: RevokeUnspentByProofKeyInput,
     ) => Effect.Effect<ReadonlyArray<string>, AuthPairingLinkRepositoryError>;
+    /** Changes an unspent link. None once it is used, revoked or expired. */
+    readonly setProjectVisibility: (
+      input: SetAuthPairingLinkProjectVisibilityInput,
+    ) => Effect.Effect<Option.Option<AuthPairingLinkRecord>, AuthPairingLinkRepositoryError>;
   }
 >()("t3/persistence/AuthPairingLinks/AuthPairingLinkRepository") {}
 
@@ -205,7 +232,8 @@ export const make = Effect.gen(function* () {
           created_at,
           expires_at,
           consumed_at,
-          revoked_at
+          revoked_at,
+          project_visibility
         )
         VALUES (
           ${input.id},
@@ -219,7 +247,8 @@ export const make = Effect.gen(function* () {
           ${input.createdAt},
           ${input.expiresAt},
           NULL,
-          NULL
+          NULL,
+          ${input.projectVisibility ?? null}
         )
       `,
   });
@@ -286,7 +315,8 @@ export const make = Effect.gen(function* () {
             SELECT 1 FROM auth_connect_devices
             WHERE auth_connect_devices.proof_key_thumbprint = auth_pairing_links.proof_key_thumbprint
           ) AS "connectApproved",
-          requested_client_json AS "requestedClient"
+          requested_client_json AS "requestedClient",
+          project_visibility AS "projectVisibility"
       `,
   });
 
@@ -312,7 +342,8 @@ export const make = Effect.gen(function* () {
             SELECT 1 FROM auth_connect_devices
             WHERE auth_connect_devices.proof_key_thumbprint = auth_pairing_links.proof_key_thumbprint
           ) AS "connectApproved",
-          requested_client_json AS "requestedClient"
+          requested_client_json AS "requestedClient",
+          project_visibility AS "projectVisibility"
         FROM auth_pairing_links
         WHERE revoked_at IS NULL
           AND consumed_at IS NULL
@@ -364,7 +395,8 @@ export const make = Effect.gen(function* () {
             SELECT 1 FROM auth_connect_devices
             WHERE auth_connect_devices.proof_key_thumbprint = auth_pairing_links.proof_key_thumbprint
           ) AS "connectApproved",
-          requested_client_json AS "requestedClient"
+          requested_client_json AS "requestedClient",
+          project_visibility AS "projectVisibility"
         FROM auth_pairing_links
         WHERE credential = ${credential}
       `,
@@ -388,7 +420,8 @@ export const make = Effect.gen(function* () {
         SELECT 1 FROM auth_connect_devices
         WHERE auth_connect_devices.proof_key_thumbprint = auth_pairing_links.proof_key_thumbprint
       ) AS "connectApproved",
-      requested_client_json AS "requestedClient"
+      requested_client_json AS "requestedClient",
+      project_visibility AS "projectVisibility"
     FROM auth_pairing_links
   `;
 
@@ -433,6 +466,21 @@ export const make = Effect.gen(function* () {
         WHERE id = ${id}
           AND requires_connect_approval = 1
           AND requested_client_json IS NULL
+        RETURNING id AS "id"
+      `,
+  });
+
+  const setPairingLinkProjectVisibilityRows = SqlSchema.findAll({
+    Request: SetAuthPairingLinkProjectVisibilityInput,
+    Result: Schema.Struct({ id: Schema.String }),
+    execute: ({ id, projectVisibility, now }) =>
+      sql`
+        UPDATE auth_pairing_links
+        SET project_visibility = ${projectVisibility}
+        WHERE id = ${id}
+          AND revoked_at IS NULL
+          AND consumed_at IS NULL
+          AND expires_at > ${now}
         RETURNING id AS "id"
       `,
   });
@@ -521,6 +569,22 @@ export const make = Effect.gen(function* () {
         ),
       ),
       Effect.map((rows) => rows.map((row) => row.id)),
+    );
+
+  const setProjectVisibility: AuthPairingLinkRepository["Service"]["setProjectVisibility"] = (
+    input,
+  ) =>
+    setPairingLinkProjectVisibilityRows(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthPairingLinkRepository.setProjectVisibility:query",
+          "AuthPairingLinkRepository.setProjectVisibility:decodeRows",
+          { pairingLinkId: input.id },
+        ),
+      ),
+      Effect.flatMap((rows) =>
+        rows.length === 0 ? Effect.succeedNone : getActiveById({ id: input.id, now: input.now }),
+      ),
     );
 
   const create: AuthPairingLinkRepository["Service"]["create"] = (input) =>
@@ -633,6 +697,7 @@ export const make = Effect.gen(function* () {
     findPendingConnect,
     recordConnectRequestClient,
     revokeUnspentByProofKey,
+    setProjectVisibility,
   } satisfies AuthPairingLinkRepository["Service"];
 });
 

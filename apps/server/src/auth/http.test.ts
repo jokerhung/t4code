@@ -265,3 +265,62 @@ it.live("checks token-endpoint DPoP proofs without writing replay state", () =>
     );
   }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
 );
+
+it.effect("lets only a session that manages access change a device's shown projects", () =>
+  Effect.gen(function* () {
+    const random = yield* SecureRandom.SecureRandom;
+    const unusedSecretStore = ServerSecretStore.ServerSecretStore.of({
+      get: () => Effect.succeedNone,
+      set: () => Effect.void,
+      create: () => Effect.void,
+      getOrCreateRandom: () => Effect.die("Not used by these routes."),
+      remove: () => Effect.void,
+    });
+    const requestContext = Context.make(SecureRandom.SecureRandom, random).pipe(
+      Context.add(ServerSecretStore.ServerSecretStore, unusedSecretStore),
+    );
+    return yield* Effect.acquireUseRelease(
+      Effect.sync(() => HttpRouter.toWebHandler(layerRoutes, { disableLogger: true })),
+      (environment) =>
+        Effect.promise(async () => {
+          const bearer = async (scope: string) => {
+            const response = await environment.handler(
+              new Request("http://127.0.0.1/oauth/token", {
+                method: "POST",
+                body: new URLSearchParams({
+                  grant_type: AuthTokenExchangeGrantType,
+                  subject_token: DEV_TOKEN,
+                  subject_token_type: AuthEnvironmentBootstrapTokenType,
+                  requested_token_type: AuthAccessTokenType,
+                  scope,
+                }),
+              }),
+              requestContext,
+            );
+            expect(response.status).toBe(200);
+            const body = (await response.json()) as { readonly access_token: string };
+            return { authorization: `Bearer ${body.access_token}` };
+          };
+          const update = (headers: Readonly<Record<string, string>>) =>
+            environment.handler(
+              postJson(
+                "/api/auth/project-visibility",
+                {
+                  target: { pairingLinkId: "no-such-link" },
+                  projectVisibility: { mode: "selected", projectIds: [] },
+                },
+                headers,
+              ),
+              requestContext,
+            );
+
+          expect((await update({})).status).toBe(401);
+          expect((await update(await bearer("orchestration:read access:read"))).status).toBe(403);
+          const allowed = await update(await bearer("access:write"));
+          expect(allowed.status).toBe(200);
+          expect(await allowed.json()).toEqual({ updated: false });
+        }),
+      (environment) => Effect.promise(() => environment.dispose()),
+    );
+  }).pipe(Effect.provide(Layer.mergeAll(NodeServices.layer, NodeCrypto.layer))),
+);

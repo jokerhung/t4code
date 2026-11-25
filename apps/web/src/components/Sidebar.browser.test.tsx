@@ -25,6 +25,8 @@ import { useNowMinute } from "../hooks/useNowMinute";
 import { __setClientSettingsForTests, getClientSettings } from "../hooks/useSettings";
 import { useThreadRouteTarget } from "../hooks/useThreadRouteTarget";
 import { useProjects, useServerConfigs, useQuietThreadShells } from "../state/entities";
+import { useSidebarProjectVisibility } from "../state/projectVisibility";
+import type { VisibilityByEnvironment } from "../projectVisibility.logic";
 import { useConnectedEnvironmentIds, usePrimaryEnvironmentId } from "../state/environments";
 import { readEnvironmentScope, useEnvironmentScope } from "../state/session";
 import { useOrchestrationCommand } from "../state/use-orchestration-command";
@@ -42,6 +44,7 @@ vi.mock(import("../state/olderSettledShelf"), async (original) => {
 });
 vi.mock("../state/entities", { spy: true });
 vi.mock("../state/environments", { spy: true });
+vi.mock("../state/projectVisibility", { spy: true });
 vi.mock("../hooks/useHandleNewThread", { spy: true });
 vi.mock("../hooks/useNowMinute", { spy: true });
 vi.mock("../hooks/useThreadRouteTarget", { spy: true });
@@ -569,5 +572,65 @@ describe("sidebar settled pagination", () => {
     const loadedRows = screen.container.querySelectorAll("[data-thread-item]").length;
     await act(() => moreButton.click());
     expect(screen.container.querySelectorAll("[data-thread-item]")).toHaveLength(loadedRows);
+  });
+});
+
+describe("sidebar project visibility", () => {
+  it("leaves out a hidden project, its threads and drafts, until it is selected again", async () => {
+    const initial = useComposerDraftStore.getState();
+    using stack = new DisposableStack();
+    stack.defer(() => useComposerDraftStore.setState(initial, true));
+    const previousSettings = getClientSettings();
+    stack.defer(() => __setClientSettingsForTests(previousSettings));
+    __setClientSettingsForTests({ ...DEFAULT_CLIENT_SETTINGS, boringSidebarEnabled: true });
+    const shown = project("shown-app");
+    const hidden = project("hidden-app");
+    vi.mocked(useProjects).mockReturnValue([shown, hidden]);
+    vi.mocked(useQuietThreadShells).mockReturnValue([
+      { ...threadShell(shown.id, 0), title: "Shown work" },
+      { ...threadShell(hidden.id, 1), title: "Hidden work" },
+    ]);
+    vi.mocked(useThreadRouteTarget).mockReturnValue(null);
+    vi.mocked(useHandleNewThread).mockReturnValue({
+      activeDraftThread: null,
+      activeThread: null,
+      defaultProjectRef: null,
+      defaultProjectFallbackReady: true,
+      handleNewThread: vi.fn(),
+      routeDraftId: null,
+      routeThreadRef: null,
+    });
+    const draftId = DraftId.make("hidden-draft");
+    initial.setProjectDraftThreadId(scopeProjectRef(hidden.environmentId, hidden.id), draftId, {
+      threadId: ThreadId.make("hidden-draft-thread"),
+      createdAt: "2026-01-02T00:00:00.000Z",
+    });
+    initial.setPrompt(draftId, "Unsent hidden prompt");
+    const showing = (...projectIds: Array<ProjectId>): VisibilityByEnvironment =>
+      new Map([[shown.environmentId, { mode: "selected", projectIds }]]);
+    const tree = () => (
+      <SidebarProvider>
+        <Sidebar routeReveal={{ observedKey: null, pendingKey: null }} />
+      </SidebarProvider>
+    );
+
+    vi.mocked(useSidebarProjectVisibility).mockReturnValue(showing(shown.id));
+    await using screen = await render(tree());
+    await expect.element(screen.getByText("Shown work").first()).toBeInTheDocument();
+    await expect.element(screen.getByText("Hidden work")).not.toBeInTheDocument();
+    await expect.element(screen.getByText("hidden-app")).not.toBeInTheDocument();
+    await expect.element(screen.getByTestId("sidebar-draft-row")).not.toBeInTheDocument();
+
+    vi.mocked(useSidebarProjectVisibility).mockReturnValue(showing(shown.id, hidden.id));
+    await screen.rerender(tree());
+    await expect.element(screen.getByText("Hidden work").first()).toBeInTheDocument();
+    await expect.element(screen.getByTestId("sidebar-draft-row")).toBeInTheDocument();
+
+    vi.mocked(useSidebarProjectVisibility).mockReturnValue(showing());
+    await screen.rerender(tree());
+    await expect.element(screen.getByText("Shown work")).not.toBeInTheDocument();
+    await expect
+      .element(screen.getByText("No projects are selected for this device"))
+      .toBeVisible();
   });
 });

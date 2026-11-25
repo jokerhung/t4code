@@ -39,7 +39,7 @@ export function ComposerContextUsage({
             window.windowDurationMins === 300
               ? gt("5-hour limit")
               : window.label === "Weekly"
-                ? gt("Weekly ? all models")
+                ? gt("Weekly · all models")
                 : window.label,
           left: remainingPercent(window),
           fiveHour: window.windowDurationMins === 300,

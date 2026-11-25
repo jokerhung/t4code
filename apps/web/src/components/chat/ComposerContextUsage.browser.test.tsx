@@ -1,3 +1,4 @@
+import "~/index.css";
 import { deriveLatestContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
 import { expect, it, vi } from "vite-plus/test";
 import { page, userEvent } from "vite-plus/test/browser";
@@ -88,16 +89,12 @@ it("shows five-hour and weekly used and remaining percentages with reset times",
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "Usage" });
   await expect.element(dialog.getByText("5-hour limit", { exact: true })).toBeVisible();
-  await expect.element(dialog.getByText("Weekly ? all models", { exact: true })).toBeVisible();
-  await expect.element(dialog.getByRole("progressbar", { name: "5-hour limit" })).toBeVisible();
-  await expect
-    .element(dialog.getByRole("progressbar", { name: "Weekly ? all models" }))
-    .toBeVisible();
+  await expect.element(dialog.getByText("Weekly · all models", { exact: true })).toBeVisible();
   await expect
     .element(dialog.getByRole("progressbar", { name: "5-hour limit" }))
     .toHaveAttribute("aria-valuenow", "35");
   await expect
-    .element(dialog.getByRole("progressbar", { name: "Weekly ? all models" }))
+    .element(dialog.getByRole("progressbar", { name: "Weekly · all models" }))
     .toHaveAttribute("aria-valuetext", "20% used, 80% remaining");
   await expect.element(dialog.getByText(/^Resets /).first()).toBeVisible();
 });

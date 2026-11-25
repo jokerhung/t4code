@@ -1346,6 +1346,13 @@
   "75b6d7c3bc9c72da": "Não foi possível abrir no {editor}",
   "415d9fed5542d278": "Não foi possível abrir o arquivo",
   "1d1bbe5b700afe63": "Não foi possível mostrar o arquivo",
+  "5004547dc22a40db": "Baixar",
+  "283ca6094d71ee00": "Copy download link",
+  "68883cb3342998e5": "Reconecte-se ao ambiente e tente novamente.",
+  "fd15f50f32d75b11": "Download link copied",
+  "35fbaff8b7b889d7": "This temporary link lets you download the file directly.",
+  "075d454a45aabc87": "Unable to download file",
+  "448735c0084132f5": "Tente novamente.",
   "31dc19d033af2774": "Não foi possível abrir o link.",
   "029d8d0201aed231": "Não foi possível abrir as Configurações do Sistema.",
   "9af3083226778d3c": "O Open VSX retornou detalhes de tema malformados.",
@@ -1441,7 +1448,6 @@
   "b33ee2521fc7686e": "Pré-visualização do plano indisponível.",
   "b48540ebc8788b76": "Não foi possível concluir o login no ChatGPT",
   "52e824623cffe356": "Volte ao provedor e tente novamente.",
-  "68883cb3342998e5": "Reconecte-se ao ambiente e tente novamente.",
   "cb4b97318340b585": "Dispositivo",
   "d407926eb12273d6": "Limite de uso atingido",
   "81d48ad533f04c08": "Erro do provedor",
@@ -1967,7 +1973,6 @@
   "8bf65a425f50d140": "Claro",
   "d604bc5cf3386f00": "Escuro",
   "4758dde317babc14": "Não foi possível salvar a seleção de tema",
-  "448735c0084132f5": "Tente novamente.",
   "e1ef4197dc810bab": "Para o modo claro",
   "002fa063deda988d": "Para o modo escuro",
   "9c6962c66efa5668": "Mudar aparência",
@@ -2670,6 +2675,7 @@
   "fcaffe60c85338e2": "Não foi possível carregar threads mais antigas. Tentar novamente",
   "43acfc82011a8fc2": "{count, plural, one {Mostrar mais {count}} other {Mostrar mais {count}}}",
   "08ff4b5e32bc46b8": "Nenhum projeto correspondente.",
+  "dfc1b00923b10bee": "Nenhum projeto está selecionado para este dispositivo",
   "6392f9e0f61ae70c": "Nenhum projeto ainda",
   "19df05d390e2c3ae": "Mostrar todos os projetos",
   "84fa7d3765db7e84": "Nenhuma thread ainda",
@@ -3212,10 +3218,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "no computador que abriu esta página"
-      ]
+      "c": [" ", "no computador que abriu esta página"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3227,10 +3230,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· quem executar recebe este acesso"
-      ]
+      "c": [" ", "· quem executar recebe este acesso"]
     }
   ],
   "c54cc9c75db9dc58": "Aprove apenas um login que você acabou de iniciar.",
@@ -3526,7 +3526,7 @@
   "0a6fbecab03f7ef3": "Nenhum arquivo ou pasta correspondente.",
   "0e7b21ab11721ca7": "Nenhum comando correspondente.",
   "5ab455b91b4b59e6": "5-hour limit",
-  "7c26c5915da68332": "Weekly ? all models",
+  "67a60f4245f0a211": "Weekly · all models",
   "a78cd5e9ba29195c": "Resets at {time}",
   "c0c3aa756405c1df": "Renova {time}",
   "9d2fc1003e82feb1": "Uso",
@@ -7692,6 +7692,7 @@
   "1565dfce5dec4b82": "Criar link de pareamento",
   "b40e476b23c85e10": "Gera um link de uso único que outro dispositivo pode usar para parear com este backend como cliente autorizado.",
   "f9688fef8cc2ff10": "Rótulo do cliente (opcional)",
+  "4a159a7988821045": "Selecione pelo menos um projeto.",
   "f65d50129cd76fd7": "Limite o que o cliente pareado pode fazer.",
   "4e3d361728cb9b37": "Somente leitura",
   "e9b142be5c4b1e9a": "Selecione pelo menos uma permissão.",
@@ -9321,6 +9322,18 @@
   "3310e10f1efdc9bd": "Escolher ícone",
   "65ccf4f8e049003e": "Escolha um projeto para gerenciar o nome, o ícone, os checkouts e as ações dele.",
   "067beea7d8f6e2c9": "Mostrar todos os ambientes",
+  "02155a6c2ff34c49": "{count} selecionados",
+  "53f2b5cf86263a9b": "Este link já foi usado. Edite o dispositivo pareado por ele.",
+  "b8e70f9a8c35f493": "Este dispositivo não está mais pareado.",
+  "837998c5773b0f37": "Não foi possível atualizar os projetos exibidos",
+  "c9650f8c03e56e70": "Editar projetos exibidos: {summary}",
+  "2b7bc88266409180": "Projetos exibidos neste dispositivo",
+  "a97703cf2b121297": "Isso apenas oculta projetos na barra lateral. Não bloqueia o acesso a eles.",
+  "a460f7c807eb8cc2": "Todos os projetos, inclusive os novos",
+  "14ea81e95c62c0f1": "Apenas os projetos selecionados",
+  "4f113bb0bc732b3d": "Limpar",
+  "63c497019acd7780": "Projetos exibidos",
+  "5869c6e410ee77c0": "Escolha o que este dispositivo lista. A mudança vale sem parear de novo.",
   "1bf6da50131340d4": "Matiz da cor de destaque",
   "21b0794e20eb46c4": "Cor de destaque hexadecimal personalizada",
   "e69555836cf65e6d": "Alterar a cor de destaque de {provider}",
@@ -10219,7 +10232,6 @@
   "8c24e88e226fce57": "A instalação falhou.",
   "132b21b672824737": "Não foi possível verificar atualizações",
   "d1c62f207937d80b": "A verificação de atualizações falhou.",
-  "5004547dc22a40db": "Baixar",
   "7d04c4f0bdb67741": "Atualizado",
   "943047215ad556d5": "Verificar atualizações",
   "a474bef3f2ff5815": "Atualização disponível.",

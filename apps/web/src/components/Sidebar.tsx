@@ -134,6 +134,12 @@ import { useHandleNewThread } from "../hooks/useHandleNewThread";
 import { useOrderWhileOpen } from "../hooks/useOrderWhileOpen";
 import { useProjectPin } from "../hooks/useProjectGroupUpdate";
 import { useSidebarProjectGroups } from "../hooks/useSidebarProjectGroups";
+import {
+  filterListed,
+  projectListFilter,
+  type VisibilityByEnvironment,
+} from "../projectVisibility.logic";
+import { useSidebarProjectVisibility } from "../state/projectVisibility";
 import { isCommandPaletteOpen, openCommandPalette } from "../commandPaletteBus";
 import { registerSettleAndAdvance } from "../settleAndAdvance";
 import { resolveThreadActionProjectRef, startNewThreadFromContext } from "../lib/chatThreadActions";
@@ -431,6 +437,7 @@ function routeThreadOnly(
 function useSidebarThreads(input: {
   readonly projectScopeKey: string | null;
   readonly scopedProjectKeys: ReadonlySet<string> | null;
+  readonly projectVisibility: VisibilityByEnvironment;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly connectedEnvironmentIds: readonly EnvironmentId[];
   readonly optimisticDrop: SidebarOptimisticDrop | null;
@@ -446,6 +453,7 @@ function useSidebarThreads(input: {
   const {
     projectScopeKey,
     scopedProjectKeys,
+    projectVisibility,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -511,7 +519,7 @@ function useSidebarThreads(input: {
     partition;
   // Older settled threads load in pages; the shelf lists them only as far as they are loaded.
   const olderSettledShelf = useOlderSettledShelf({
-    scopes: olderSettledScopes([...serverConfigs.keys()], scopedProjectKeys),
+    scopes: olderSettledScopes([...serverConfigs.keys()], scopedProjectKeys, projectVisibility),
     expanded: folderGroups !== null || settledShelfExpanded,
     visibleCount: settledVisibleCount,
   });
@@ -750,9 +758,17 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
 function olderSettledScopes(
   environmentIds: ReadonlyArray<EnvironmentId>,
   scopedProjectKeys: ReadonlySet<string> | null,
+  visibility: VisibilityByEnvironment,
 ): ReadonlyArray<OlderSettledScope> {
   if (scopedProjectKeys === null) {
-    return environmentIds.map((environmentId) => ({ environmentId, projectIds: null }));
+    return environmentIds.flatMap((environmentId): Array<OlderSettledScope> => {
+      const limit = visibility.get(environmentId);
+      if (limit === undefined) return [{ environmentId, projectIds: null }];
+      // Otherwise the shelf would count, and page in, threads of hidden projects.
+      return limit !== "pending" && limit.mode === "selected" && limit.projectIds.length > 0
+        ? [{ environmentId, projectIds: [...limit.projectIds] }]
+        : [];
+    });
   }
   return environmentIds.flatMap((environmentId) => {
     const prefix = `${environmentId}:`;
@@ -841,7 +857,8 @@ function useSidebarLookups() {
   const environments = useEnvironmentIdentities();
   const serverConfigs = useServerConfigs();
   const providerEntriesByEnvironment = useAtomValue(sidebarProviderEntriesAtom);
-  const projectGroups = useSidebarProjectGroups();
+  const projectVisibility = useSidebarProjectVisibility();
+  const projectGroups = useSidebarProjectGroups(projectVisibility);
   const environmentLabelById = new Map(
     environments.map((environment) => [environment.environmentId, environment.label] as const),
   );
@@ -868,6 +885,7 @@ function useSidebarLookups() {
   ];
   return {
     projects,
+    projectVisibility,
     serverConfigs,
     projectGroups,
     environmentLabelById,
@@ -937,6 +955,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const messages = useMessages();
   const {
     projects,
+    projectVisibility,
     serverConfigs,
     projectGroups,
     environmentLabelById,
@@ -1133,7 +1152,11 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             ),
           ),
         );
-  const threads = useQuietThreadShells();
+  const isProjectListed = projectListFilter(projectVisibility);
+  // Everything below lists from these, so a hidden project's threads reach no sidebar section.
+  const threads = filterListed(useQuietThreadShells(), projectVisibility, (thread) =>
+    isProjectListed(thread.environmentId, thread.projectId),
+  );
   const promotingDraftThreadKeys = usePromotingDraftThreadKeys();
   const listedThreads =
     promotingDraftThreadKeys.length === 0
@@ -1239,6 +1262,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       ) {
         continue;
       }
+      if (!isProjectListed(session.environmentId, session.projectId)) continue;
       count += 1;
     }
     return count;
@@ -1377,6 +1401,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   } = useSidebarThreads({
     projectScopeKey,
     scopedProjectKeys,
+    projectVisibility,
     serverConfigs,
     connectedEnvironmentIds,
     optimisticDrop,
@@ -1471,6 +1496,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const snoozedThreadKeysRef = useRef(snoozedThreadKeys);
 
   const { draftIds, routeDraftComposer } = useSidebarDrafts(
+    isProjectListed,
     scopedProjectKeys,
     routeDraftIdForRows,
     draftTerminalLabels,
@@ -3439,7 +3465,13 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             0 &&
           (settledCount === 0 || scopedProjectGroups.length > 0) ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
-              {projects.length === 0 ? (
+              {projects.length > 0 && projectGroups.length === 0 && projectVisibility.size > 0 ? (
+                [...projectVisibility.values()].includes("pending") ? null : (
+                  <p>
+                    <T>No projects are selected for this device</T>
+                  </p>
+                )
+              ) : projects.length === 0 ? (
                 <>
                   <span>
                     <T>No projects yet</T>

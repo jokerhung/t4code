@@ -20,6 +20,7 @@ import { useTerminalLabelsByThreadKey } from "~/state/terminalSessions";
 import { resolveSidebarRowAccessibility } from "../Sidebar.logic";
 import { ProjectFavicon, type ProjectFaviconProject } from "../ProjectFavicon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import type { IsProjectListed } from "../../projectVisibility.logic";
 import {
   composerDraftHasUserContent,
   DraftId,
@@ -212,6 +213,7 @@ function listedDraftComposer(draftId: string | null): ComposerThreadDraftState |
  * row it had on arrival (frozen content), so its row and jump number stay put.
  */
 export function useSidebarDrafts(
+  isProjectListed: IsProjectListed,
   scopedProjectKeys: ReadonlySet<string> | null,
   routeDraftId: string | null,
   terminalLabels: ReadonlyMap<string, string>,
@@ -230,6 +232,7 @@ export function useSidebarDrafts(
       const listed: [string, DraftSessionState][] = [];
       for (const [draftKey, session] of Object.entries(store.draftThreadsByThreadKey)) {
         if (session.promotedTo != null) continue;
+        if (!isProjectListed(session.environmentId, session.projectId)) continue;
         if (
           scopedProjectKeys !== null &&
           !scopedProjectKeys.has(`${session.environmentId}:${session.projectId}`)

@@ -89,6 +89,7 @@ import {
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
   AuthAccessStreamError,
+  AuthProjectVisibility,
   AuthAccessStreamEvent,
   EnvironmentAuthorizationError,
 } from "./auth.ts";
@@ -736,6 +737,7 @@ export const WS_METHODS = {
   subscribeServerConfig: "subscribeServerConfig",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
+  subscribeProjectVisibility: "subscribeProjectVisibility",
   subscribeResourceTelemetry: "subscribeResourceTelemetry",
 } as const;
 
@@ -2439,6 +2441,14 @@ const WsScheduledTasksGetWebhookDeliveryRpc = Rpc.make(
   },
 );
 
+/** The caller's own session only: which projects its sidebar lists, then each change. */
+const WsSubscribeProjectVisibilityRpc = Rpc.make(WS_METHODS.subscribeProjectVisibility, {
+  payload: Schema.Struct({}),
+  success: AuthProjectVisibility,
+  error: Schema.Union([AuthAccessStreamError, EnvironmentAuthorizationError]),
+  stream: true,
+});
+
 const WsSubscribeAuthAccessRpc = Rpc.make(WS_METHODS.subscribeAuthAccess, {
   payload: Schema.Struct({}),
   success: AuthAccessStreamEvent,
@@ -2692,6 +2702,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
+  WsSubscribeProjectVisibilityRpc,
   WsSubscribeResourceTelemetryRpc,
   WsOrchestrationV2DispatchCommandRpc,
   WsOrchestrationV2GetWorkflowScriptRpc,

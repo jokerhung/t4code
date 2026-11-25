@@ -16,7 +16,12 @@ function DraftBlock(props: {
 }) {
   const routeDraftId = props.routeDraftId ?? null;
   const terminalLabels = props.terminalLabels ?? NO_TERMINAL_LABELS;
-  const { draftIds, routeDraftComposer } = useSidebarDrafts(null, routeDraftId, terminalLabels);
+  const { draftIds, routeDraftComposer } = useSidebarDrafts(
+    () => true,
+    null,
+    routeDraftId,
+    terminalLabels,
+  );
   return (
     <SidebarDraftBlock
       draftIds={draftIds}

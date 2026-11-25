@@ -3,9 +3,10 @@ import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 
 import {
   AuthSessionId,
-  ForwardCompatibleArray,
   ClientSurface,
   ClientWebDeployment,
+  ForwardCompatibleArray,
+  ProjectId,
   TrimmedNonEmptyString,
 } from "./baseSchemas.ts";
 import { RuntimeMode } from "./providerPolicy.ts";
@@ -359,6 +360,25 @@ export const AuthClientMetadata = Schema.Struct({
 });
 export type AuthClientMetadata = typeof AuthClientMetadata.Type;
 
+/**
+ * Which projects a device lists in its sidebar. A display preference, not access control: the
+ * server still sends every project. Absent means `all`.
+ */
+export const AuthProjectVisibility = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("all") }),
+  Schema.Struct({ mode: Schema.Literal("selected"), projectIds: Schema.Array(ProjectId) }),
+]);
+export type AuthProjectVisibility = typeof AuthProjectVisibility.Type;
+
+/** A new link must show at least one project; only a later edit may hide them all. */
+const AuthNewProjectVisibility = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("all") }),
+  Schema.Struct({
+    mode: Schema.Literal("selected"),
+    projectIds: Schema.NonEmptyArray(ProjectId),
+  }),
+]);
+
 /** A T3 Connect device waiting for someone on this environment to approve it. */
 export const AuthConnectDeviceRequest = Schema.Struct({
   verificationCode: TrimmedNonEmptyString,
@@ -376,6 +396,8 @@ export const AuthPairingLink = Schema.Struct({
   expiresAt: Schema.DateTimeUtc,
   /** Set while a T3 Connect device waits for approval. Older servers never send it. */
   connectDeviceRequest: Schema.optionalKey(AuthConnectDeviceRequest),
+  /** Present only when the link limits the projects its device lists. */
+  projectVisibility: Schema.optionalKey(AuthProjectVisibility),
 });
 export type AuthPairingLink = typeof AuthPairingLink.Type;
 
@@ -399,6 +421,8 @@ export const AuthClientSession = Schema.Struct({
   lastConnectedAt: Schema.NullOr(Schema.DateTimeUtc),
   connected: Schema.Boolean,
   current: Schema.Boolean,
+  /** Present only when the device lists a subset of projects. */
+  projectVisibility: Schema.optionalKey(AuthProjectVisibility),
 });
 export type AuthClientSession = typeof AuthClientSession.Type;
 
@@ -521,6 +545,8 @@ export const AuthCreatePairingCredentialInput = Schema.Union([
     ...pairingCredentialFields,
     access: Schema.optionalKey(AuthMcpClientAccess),
     purpose: Schema.optionalKey(Schema.Undefined),
+    /** Ignored by servers without the `projectVisibility` capability. */
+    projectVisibility: Schema.optionalKey(AuthNewProjectVisibility),
   }),
   Schema.Struct({
     ...pairingCredentialFields,
@@ -529,6 +555,19 @@ export const AuthCreatePairingCredentialInput = Schema.Union([
   }),
 ]);
 export type AuthCreatePairingCredentialInput = typeof AuthCreatePairingCredentialInput.Type;
+
+export const AuthUpdateProjectVisibilityInput = Schema.Struct({
+  target: Schema.Union([
+    Schema.Struct({ pairingLinkId: TrimmedNonEmptyString }),
+    Schema.Struct({ sessionId: AuthSessionId }),
+  ]),
+  projectVisibility: AuthProjectVisibility,
+});
+export type AuthUpdateProjectVisibilityInput = typeof AuthUpdateProjectVisibilityInput.Type;
+
+/** `updated` is false when the link was already used or the session is gone. */
+export const AuthUpdateProjectVisibilityResult = Schema.Struct({ updated: Schema.Boolean });
+export type AuthUpdateProjectVisibilityResult = typeof AuthUpdateProjectVisibilityResult.Type;
 
 export const AuthSessionState = Schema.Struct({
   authenticated: Schema.Boolean,

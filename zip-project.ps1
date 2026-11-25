@@ -16,7 +16,8 @@ if (Test-Path -LiteralPath $Output) { Remove-Item -LiteralPath $Output -Force }
 # Thu muc cai dat / build / cache, bo qua o moi do sau. .env duoc giu lai.
 $excludeDirs = @(
   'node_modules', 'dist', '.turbo', '.vite', '.next', '.expo', '.cache',
-  'coverage', 'Pods', '.gradle', 'DerivedData', '.git', '.t3'
+  # 'coverage', 'Pods', '.gradle', 'DerivedData', '.git', '.t3'
+  'coverage', 'Pods', '.gradle', 'DerivedData', '.t3'
 )
 $excludeFiles = @('*.log', '*.zip', '*.tsbuildinfo')
 

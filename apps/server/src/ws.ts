@@ -79,6 +79,7 @@ import {
   type ProjectEntriesFailure,
   type ProjectFileFailure,
   type ProjectFileOperation,
+  type ProjectId,
   type ProjectMutation,
   ProjectListEntriesError,
   ProjectReadFileError,
@@ -2021,6 +2022,13 @@ export const layerWsRpc = (
         },
       );
 
+      // A device with a limited sidebar still lists the project it has just made.
+      const revealNewProject = (projectId: ProjectId) =>
+        serverAuth.revealProjectToSession(currentSessionId, projectId);
+      const revealCreatedProject = <A extends { readonly projectId: ProjectId }, E, R>(
+        creation: Effect.Effect<A, E, R>,
+      ) => creation.pipe(Effect.tap(({ projectId }) => revealNewProject(projectId)));
+
       const mutateProject = Effect.fn("ws.projects.mutate")(function* (mutation: ProjectMutation) {
         return yield* mutateProjectWithClone(projectService, projectCloneTracker, mutation);
       });
@@ -3005,6 +3013,7 @@ export const layerWsRpc = (
                 })
                 .pipe(
                   Effect.asVoid,
+                  Effect.tap(() => revealNewProject(project.projectId)),
                   Effect.mapError((cause) =>
                     cause._tag === "ProjectConflictError"
                       ? cause
@@ -3032,26 +3041,25 @@ export const layerWsRpc = (
           }),
         [WS_METHODS.projectsEnsureScratch]: () =>
           managedFolders.ensureScratchProject.pipe(
+            revealCreatedProject,
             Effect.mapError(
               (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
             ),
           ),
         [WS_METHODS.projectsCreateNew]: (input) =>
-          managedFolders
-            .createNamedProject(input)
-            .pipe(
-              Effect.mapError(
-                (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
-              ),
+          managedFolders.createNamedProject(input).pipe(
+            revealCreatedProject,
+            Effect.mapError(
+              (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
             ),
+          ),
         [WS_METHODS.projectsCreateFromThread]: (input) =>
-          scratchThreadPromotion
-            .promote(input)
-            .pipe(
-              Effect.mapError(
-                (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
-              ),
+          scratchThreadPromotion.promote(input).pipe(
+            revealCreatedProject,
+            Effect.mapError(
+              (cause) => new OrchestrationDispatchCommandError({ message: cause.message, cause }),
             ),
+          ),
         [WS_METHODS.projectCloneCancel]: (input) =>
           projectCloneTracker.cancel(input.projectId).pipe(Effect.map((applied) => ({ applied }))),
         [WS_METHODS.projectCloneRetry]: (input) =>
@@ -3139,6 +3147,11 @@ export const layerWsRpc = (
           ),
         [WS_METHODS.projectsMutate]: (mutation) =>
           startup.enqueueCommand(mutateProject(mutation)).pipe(
+            Effect.tap(() =>
+              mutation.type === "project.create"
+                ? revealNewProject(mutation.projectId)
+                : Effect.void,
+            ),
             Effect.mapError(
               (cause) =>
                 new ProjectMutationError({
@@ -3676,6 +3689,12 @@ export const layerWsRpc = (
               return Stream.concat(rpcInitialItems(snapshotEvents), liveEvents);
             }),
           ),
+        [WS_METHODS.subscribeProjectVisibility]: (_input) =>
+          serverAuth
+            .streamProjectVisibility(currentSessionId)
+            .pipe(
+              Stream.mapError((error) => new AuthAccessStreamError({ message: error.message })),
+            ),
         [WS_METHODS.subscribeAuthAccess]: (_input) =>
           Stream.unwrap(
             Effect.gen(function* () {

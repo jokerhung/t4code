@@ -1,3 +1,4 @@
+import { openDirectDownload } from "../../lib/directDownload";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { filePreviewDelimiter } from "@t3tools/shared/delimitedPreview";
 import type { AssetResource, EnvironmentId, ScopedThreadRef } from "@t3tools/contracts";
@@ -257,11 +258,8 @@ export function AttachmentFilePreview(props: {
     void settlePromise(async () => {
       let file = props.file;
       if (!file) {
-        const target = await prepareDownload();
-        if (!target) throw new Error(gt("Reconnect to the environment and try again."));
-        const response = await fetch(target);
-        if (!response.ok) throw new Error(gt("The file could not be loaded. Try again."));
-        file = await response.blob();
+        await openDirectDownload(prepareDownload);
+        return;
       }
       // Blob downloads keep desktop's custom app scheme from navigating to an external browser.
       const downloadUrl = URL.createObjectURL(file);

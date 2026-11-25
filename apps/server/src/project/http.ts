@@ -1,5 +1,6 @@
 import {
   AuthOrchestrationReadScope,
+  EnvironmentAuthenticatedPrincipal,
   EnvironmentHttpApi,
   requiredScopesForProjectMutation,
 } from "@t3tools/contracts";
@@ -12,6 +13,7 @@ import {
   failEnvironmentInvalidRequest,
   requireEnvironmentScope,
 } from "../auth/http.ts";
+import * as EnvironmentAuth from "../auth/EnvironmentAuth.ts";
 import { traceLocalHandlerWork } from "../cloud/traceRelayRequest.ts";
 import * as ServerRuntimeStartup from "../serverRuntimeStartup.ts";
 import * as ProjectCloneTracker from "./ProjectCloneTracker.ts";
@@ -39,6 +41,7 @@ export const layer = HttpApiBuilder.group(
     const projects = yield* ProjectService.ProjectService;
     const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
     const projectClones = yield* ProjectCloneTracker.ProjectCloneTracker;
+    const environmentAuth = yield* EnvironmentAuth.EnvironmentAuth;
 
     return handlers
       .handle(
@@ -60,9 +63,14 @@ export const layer = HttpApiBuilder.group(
             yield* requireEnvironmentScope(scope);
           }
           const operation = mutateProjectWithClone(projects, projectClones, args.payload);
-          return yield* startup
+          const result = yield* startup
             .enqueueCommand(operation)
             .pipe(traceLocalHandlerWork, Effect.catch(failProjectMutation));
+          if (args.payload.type === "project.create") {
+            const { sessionId } = yield* EnvironmentAuthenticatedPrincipal;
+            yield* environmentAuth.revealProjectToSession(sessionId, args.payload.projectId);
+          }
+          return result;
         }),
       );
   }),

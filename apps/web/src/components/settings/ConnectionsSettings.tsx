@@ -1178,6 +1178,7 @@ function ConnectionsSettingsContent({
     clientSessions: typeof desktopClientSessions,
   ) => (
     <PairingClientsList
+      environmentId={accessEnvironmentId}
       servedByEnvironment={isPrimaryAccess}
       endpointUrl={desktopServerExposureState?.endpointUrl}
       endpoints={visibleDesktopAdvertisedEndpoints}

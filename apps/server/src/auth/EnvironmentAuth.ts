@@ -14,6 +14,9 @@ import {
   type AuthEnvironmentScope,
   type AuthPairingLink,
   type AuthPairingCredentialResult,
+  type AuthProjectVisibility,
+  type AuthUpdateProjectVisibilityInput,
+  type ProjectId,
   type AuthSessionId,
   type AuthSessionState,
   authScopeResponse,
@@ -38,6 +41,7 @@ import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
+import * as Stream from "effect/Stream";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
@@ -182,6 +186,17 @@ export class ServerAuthPairingLinksListError extends Schema.TaggedError<ServerAu
 ) {
   override get message(): string {
     return "Failed to list pairing links.";
+  }
+}
+
+export class ServerAuthProjectVisibilityError extends Schema.TaggedError<ServerAuthProjectVisibilityError>()(
+  "ServerAuthProjectVisibilityError",
+  {
+    ...serverAuthInternalErrorContext,
+  },
+) {
+  override get message(): string {
+    return "Failed to read or update the visible projects.";
   }
 }
 
@@ -374,6 +389,7 @@ export const ServerAuthInternalError = Schema.Union([
   ServerAuthPairingLinkCreationError,
   ServerAuthPairingLinksListError,
   ServerAuthPairingLinkRevocationError,
+  ServerAuthProjectVisibilityError,
   ServerAuthSessionTokenIssueError,
   ServerAuthSessionsListError,
   ServerAuthSessionRevocationError,
@@ -544,6 +560,7 @@ export class EnvironmentAuth extends Context.Service<
       readonly purpose?: "startup";
       readonly mcpApproval?: AuthMcpClientAccess;
       readonly requiresConnectApproval?: boolean;
+      readonly projectVisibility?: AuthProjectVisibility;
     }) => Effect.Effect<
       IssuedPairingLink,
       ServerAuthInternalError | ManagedLimits.ManagedPolicyRefusedError
@@ -608,6 +625,18 @@ export class EnvironmentAuth extends Context.Service<
     readonly listClientSessions: (
       currentSessionId: AuthSessionId,
     ) => Effect.Effect<ReadonlyArray<AuthClientSession>, ServerAuthInternalError>;
+    /** Which projects a link or session lists. False when it is gone, or the link was used. */
+    readonly updateProjectVisibility: (
+      input: AuthUpdateProjectVisibilityInput,
+    ) => Effect.Effect<boolean, ServerAuthInternalError>;
+    /** Shows a project to the limited session that just created it. Never fails the creation. */
+    readonly revealProjectToSession: (
+      sessionId: AuthSessionId,
+      projectId: ProjectId,
+    ) => Effect.Effect<void>;
+    readonly streamProjectVisibility: (
+      sessionId: AuthSessionId,
+    ) => Stream.Stream<AuthProjectVisibility, ServerAuthInternalError>;
     /** Revokes a session; one bound to a device key takes the device's trust and sessions with it. */
     readonly revokeClient: (
       sessionId: AuthSessionId,
@@ -1015,6 +1044,7 @@ export const make = Effect.gen(function* () {
           method: "browser-session-cookie",
           subject: grant.subject,
           scopes: grant.scopes,
+          ...(grant.projectVisibility ? { projectVisibility: grant.projectVisibility } : {}),
           ...(previousSession?.method === "browser-session-cookie"
             ? { replaceSessionId: previousSession.sessionId }
             : {}),
@@ -1038,7 +1068,7 @@ export const make = Effect.gen(function* () {
 
   type ResolvedBootstrapGrant = Pick<
     PairingGrantStore.BootstrapGrant,
-    "scopes" | "subject" | "label"
+    "scopes" | "subject" | "label" | "projectVisibility"
   > & {
     readonly method: PairingGrantStore.BootstrapGrant["method"] | "reusable-dev-token";
   };
@@ -1170,6 +1200,9 @@ export const make = Effect.gen(function* () {
                   method: input?.proofKeyThumbprint ? "dpop-access-token" : "bearer-access-token",
                   subject: grant.subject,
                   scopes: grantedScopes,
+                  ...(grant.projectVisibility
+                    ? { projectVisibility: grant.projectVisibility }
+                    : {}),
                   ...(input?.proofKeyThumbprint
                     ? {
                         proofKeyThumbprint: input.proofKeyThumbprint,
@@ -1223,6 +1256,7 @@ export const make = Effect.gen(function* () {
         ...(input?.purpose ? { purpose: input.purpose } : {}),
         ...(input?.mcpApproval ? { mcpApproval: input.mcpApproval } : {}),
         ...(input?.requiresConnectApproval ? { requiresConnectApproval: true } : {}),
+        ...(input?.projectVisibility ? { projectVisibility: input.projectVisibility } : {}),
       });
       return {
         id: issued.id,
@@ -1430,6 +1464,10 @@ export const make = Effect.gen(function* () {
           : "one-time-token",
       ...(input?.label ? { label: input.label } : {}),
       ...(input?.access && input.purpose !== "peer-link" ? { mcpApproval: input.access } : {}),
+      // Agent and peer-link codes have no sidebar to limit.
+      ...(input && !input.access && "projectVisibility" in input && input.projectVisibility
+        ? { projectVisibility: input.projectVisibility }
+        : {}),
     }).pipe(
       Effect.map((issued) => ({
         ...toPairingCredential(issued),
@@ -1480,6 +1518,36 @@ export const make = Effect.gen(function* () {
       ),
       Effect.withSpan("EnvironmentAuth.listClientSessions"),
     );
+
+  const toProjectVisibilityError = (cause: unknown) =>
+    new ServerAuthProjectVisibilityError({ cause });
+
+  const updateProjectVisibility: EnvironmentAuth["Service"]["updateProjectVisibility"] = Effect.fn(
+    "EnvironmentAuth.updateProjectVisibility",
+  )(function* ({ target, projectVisibility }) {
+    return "pairingLinkId" in target
+      ? yield* bootstrapCredentials.setProjectVisibility(target.pairingLinkId, projectVisibility)
+      : yield* sessions.setProjectVisibility(target.sessionId, projectVisibility);
+  }, Effect.mapError(toProjectVisibilityError));
+
+  const revealProjectToSession: EnvironmentAuth["Service"]["revealProjectToSession"] = (
+    sessionId,
+    projectId,
+  ) =>
+    sessions.revealProject(sessionId, projectId).pipe(
+      Effect.catch((cause) =>
+        Effect.logWarning("Could not show a new project to the device that created it.", {
+          sessionId,
+          projectId,
+          cause,
+        }),
+      ),
+      Effect.withSpan("EnvironmentAuth.revealProjectToSession"),
+    );
+
+  const streamProjectVisibility: EnvironmentAuth["Service"]["streamProjectVisibility"] = (
+    sessionId,
+  ) => sessions.streamProjectVisibility(sessionId).pipe(Stream.mapError(toProjectVisibilityError));
 
   const proofKeyOf = (sessionId: AuthSessionId) =>
     sessions
@@ -1780,6 +1848,9 @@ export const make = Effect.gen(function* () {
     listSessions,
     revokeSession,
     listClientSessions,
+    updateProjectVisibility,
+    revealProjectToSession,
+    streamProjectVisibility,
     revokeClient,
     revokeClientSession,
     revokeOtherClientSessions,

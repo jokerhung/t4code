@@ -8,6 +8,7 @@ import {
   type ContextMenuSource,
 } from "@t3tools/contracts";
 
+import { useFileDownload } from "./fileDownload";
 import { contextMenuSourceOf } from "./contextMenuSource";
 import { resolveDiffPathForWorkspace } from "./diffFileActions";
 import {
@@ -33,6 +34,8 @@ import { msg, useMessages } from "gt-react";
 import type { MessageResolver } from "./i18n/messages";
 
 export type FileContextMenuAction =
+  | "download"
+  | "copy-download-link"
   | "reveal-in-folder"
   | "open"
   /** Submenu parent; never the activated id. */
@@ -112,6 +115,7 @@ function buildFileContextMenuItems(input: {
 }
 
 export function useFileContextMenu(environmentId: EnvironmentId | null) {
+  const downloads = useFileDownload(environmentId);
   const openInEditor = useAtomCommand(shellEnvironment.openInEditor, { reportFailure: false });
   const serverConfig = useAtomValue(serverEnvironment.configValueAtom(environmentId));
   const resolve = useMessages();
@@ -158,6 +162,10 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
     const absolutePath = resolveFileContextMenuAbsolutePath(target);
     if (absolutePath === null || environmentId === null) return;
 
+    if (action === "download" || action === "copy-download-link") {
+      await (action === "download" ? downloads.download(target) : downloads.copyLink(target));
+      return;
+    }
     const reveal = action === "reveal-in-folder";
     const editor =
       action === "open" || reveal
@@ -200,18 +208,32 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
     });
   };
 
+  const buildItems = (
+    target: FileContextMenuTarget,
+  ): readonly ContextMenuItem<FileContextMenuAction>[] => [
+    ...buildFileContextMenuItems({
+      hasAbsolutePath: resolveFileContextMenuAbsolutePath(target) !== null,
+      capabilities,
+      editorIcons,
+      resolve,
+    }),
+    ...(downloads.canDownload &&
+    !target.isDirectory &&
+    target.workspaceRoot &&
+    resolveFileContextMenuAbsolutePath(target)
+      ? [
+          { id: "download" as const, label: resolve(msg("Download")), separatorBefore: true },
+          { id: "copy-download-link" as const, label: resolve(msg("Copy download link")) },
+        ]
+      : []),
+  ];
   const show = async (
     target: FileContextMenuTarget,
     position?: { x: number; y: number },
     source?: ContextMenuSource,
   ): Promise<void> => {
     const api = readLocalApi();
-    const items = buildFileContextMenuItems({
-      hasAbsolutePath: resolveFileContextMenuAbsolutePath(target) !== null,
-      capabilities,
-      editorIcons,
-      resolve,
-    });
+    const items = buildItems(target);
     if (items.length === 0 || api === undefined) return;
     const clicked = await api.contextMenu.show(items, position, source);
     if (clicked === null) return;
@@ -219,13 +241,7 @@ export function useFileContextMenu(environmentId: EnvironmentId | null) {
   };
 
   return {
-    buildItems: (target: FileContextMenuTarget) =>
-      buildFileContextMenuItems({
-        hasAbsolutePath: resolveFileContextMenuAbsolutePath(target) !== null,
-        capabilities,
-        editorIcons,
-        resolve,
-      }),
+    buildItems,
     capabilities,
     activate,
     show,

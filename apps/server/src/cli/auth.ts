@@ -3,6 +3,7 @@ import {
   AuthRevokePairingLinkInput,
   AuthSessionId,
   AuthStandardClientScopes,
+  ProjectId,
 } from "@t3tools/contracts";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -95,6 +96,14 @@ const baseUrlFlag = Flag.String("base-url").pipe(
   Flag.optional,
 );
 
+const projectFlag = Flag.String("project").pipe(
+  Flag.withSchema(ProjectId),
+  Flag.withDescription(
+    "Project id to list in this device's sidebar. Repeat for several; omit to list every project. This only declutters the sidebar and does not restrict access.",
+  ),
+  Flag.atLeast(0),
+);
+
 const tokenOnlyFlag = Flag.Boolean("token-only").pipe(
   Flag.withDescription("Print only the issued bearer token."),
   Flag.withDefault(false),
@@ -106,6 +115,7 @@ const pairingCreateCommand = Command.make("create", {
   ttl: ttlFlag,
   label: labelFlag,
   baseUrl: baseUrlFlag,
+  projects: projectFlag,
   json: jsonFlag,
 }).pipe(
   Command.withDescription("Issue a new client pairing token."),
@@ -119,6 +129,9 @@ const pairingCreateCommand = Command.make("create", {
             subject: "one-time-token",
             ...(Option.isSome(flags.ttl) ? { ttl: flags.ttl.value } : {}),
             ...(Option.isSome(flags.label) ? { label: flags.label.value } : {}),
+            ...(flags.projects.length > 0
+              ? { projectVisibility: { mode: "selected", projectIds: flags.projects } }
+              : {}),
           });
           const output = formatIssuedPairingCredential(issued, {
             json: flags.json,

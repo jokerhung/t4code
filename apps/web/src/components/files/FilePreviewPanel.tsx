@@ -1,3 +1,4 @@
+import { openDirectDownload } from "../../lib/directDownload";
 import { thrownErrorMessage } from "@t3tools/client-runtime/errors";
 import { DownloadIcon, CopyIcon, CheckIcon, Code2Icon, EyeIcon, Table2Icon } from "lucide-react";
 import { msg, T, useGT, useMessages, Var } from "gt-react";
@@ -373,7 +374,11 @@ function WorkspacePdfSaveAction(props: {
 }) {
   const gt = useGT();
   const [saving, setSaving] = useState(false);
-  const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, props.resource);
+  const downloadResource =
+    props.resource._tag === "media-file" || props.resource._tag === "draft-workspace-file"
+      ? { ...props.resource, disposition: "attachment" as const }
+      : props.resource;
+  const refreshAssetUrl = useAssetUrlRefresh(props.environmentId, downloadResource);
   return (
     <FileSurfaceAction
       label={saving ? gt("Preparing file…") : gt("Save file")}
@@ -381,17 +386,7 @@ function WorkspacePdfSaveAction(props: {
       onPress={() => {
         setSaving(true);
         void (async () => {
-          const url = await refreshAssetUrl();
-          if (!url) throw new Error(gt("Reconnect to the environment and try again."));
-          const response = await fetch(url);
-          if (!response.ok) throw new Error(gt("The file could not be loaded. Try again."));
-          // Blob downloads keep desktop's custom app scheme from navigating to an external browser.
-          const downloadUrl = URL.createObjectURL(await response.blob());
-          setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
-          const anchor = document.createElement("a");
-          anchor.href = downloadUrl;
-          anchor.download = props.name.split(/[\\/]/).at(-1) || props.name;
-          anchor.click();
+          await openDirectDownload(refreshAssetUrl);
         })()
           .catch((cause: unknown) =>
             toastManager.add({
@@ -2006,16 +2001,7 @@ function LargeFileActions(props: {
         onPress={() => {
           setSaving(true);
           void (async () => {
-            const url = await refreshAssetUrl();
-            if (!url) throw new Error(gt("Reconnect to the environment and try again."));
-            const response = await fetch(url);
-            if (!response.ok) throw new Error(gt("The file could not be loaded. Try again."));
-            const downloadUrl = URL.createObjectURL(await response.blob());
-            setTimeout(() => URL.revokeObjectURL(downloadUrl), 30_000);
-            const anchor = document.createElement("a");
-            anchor.href = downloadUrl;
-            anchor.download = props.name.split(/[\\/]/).at(-1) || props.name;
-            anchor.click();
+            await openDirectDownload(refreshAssetUrl);
           })()
             .catch(showError)
             .finally(() => setSaving(false));

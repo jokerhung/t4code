@@ -6,6 +6,7 @@ import {
   type AuthEnvironmentScope,
   type AuthMcpClientAccess,
   type AuthPairingLink,
+  type AuthProjectVisibility,
   mcpApprovalCode,
   PAIRING_CODE_ALPHABET,
   PAIRING_CODE_LENGTH,
@@ -33,6 +34,10 @@ import * as Stream from "effect/Stream";
 import * as ServerConfig from "../config.ts";
 import * as AuthConnectDevices from "../persistence/AuthConnectDevices.ts";
 import * as AuthPairingLinks from "../persistence/AuthPairingLinks.ts";
+import {
+  encodeProjectVisibility,
+  limitedProjectVisibility,
+} from "../persistence/projectVisibility.ts";
 
 export interface BootstrapGrant {
   readonly method: ServerAuthBootstrapMethod;
@@ -41,6 +46,8 @@ export interface BootstrapGrant {
   readonly label?: string;
   readonly proofKeyThumbprint?: string;
   readonly expiresAt: DateTime.DateTime;
+  /** Absent shows every project. */
+  readonly projectVisibility?: AuthProjectVisibility;
 }
 
 export class UnknownBootstrapCredentialError extends Schema.TaggedError<UnknownBootstrapCredentialError>()(
@@ -132,6 +139,18 @@ export class PairingLinkRevokeError extends Schema.TaggedError<PairingLinkRevoke
   }
 }
 
+export class PairingLinkProjectVisibilityError extends Schema.TaggedError<PairingLinkProjectVisibilityError>()(
+  "PairingLinkProjectVisibilityError",
+  {
+    pairingLinkId: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Failed to update the visible projects of pairing link '${this.pairingLinkId}'.`;
+  }
+}
+
 export class PairingCredentialIssueError extends Schema.TaggedError<PairingCredentialIssueError>()(
   "PairingCredentialIssueError",
   {
@@ -206,6 +225,7 @@ export class BootstrapCredentialLookupError extends Schema.TaggedError<Bootstrap
 export const BootstrapCredentialInternalError = Schema.Union([
   ActivePairingLinksLoadError,
   PairingLinkRevokeError,
+  PairingLinkProjectVisibilityError,
   PairingCredentialIssueError,
   PairingCredentialRandomGenerationError,
   BootstrapCredentialConsumeError,
@@ -258,7 +278,13 @@ export class PairingGrantStore extends Context.Service<
       readonly mcpApproval?: AuthMcpClientAccess;
       /** Spendable only after someone trusts `proofKeyThumbprint` as a T3 Connect device. */
       readonly requiresConnectApproval?: boolean;
+      readonly projectVisibility?: AuthProjectVisibility;
     }) => Effect.Effect<IssuedBootstrapCredential, BootstrapCredentialInternalError>;
+    /** False once the link is used, revoked or expired, so the caller edits the session instead. */
+    readonly setProjectVisibility: (
+      id: string,
+      projectVisibility: AuthProjectVisibility,
+    ) => Effect.Effect<boolean, BootstrapCredentialInternalError>;
     /** A device's open or denied request, reused so retries keep one request and one code. */
     readonly findPendingConnect: (
       proofKeyThumbprint: string,
@@ -332,6 +358,7 @@ const toPairingLink = (row: AuthPairingLinks.AuthPairingLinkRecord): AuthPairing
   ...(row.label ? { label: row.label } : {}),
   createdAt: row.createdAt,
   expiresAt: row.expiresAt,
+  ...(row.projectVisibility ? { projectVisibility: row.projectVisibility } : {}),
   ...(row.requiresConnectApproval === 1 && row.proofKeyThumbprint
     ? {
         connectDeviceRequest: {
@@ -455,6 +482,28 @@ const make = Effect.gen(function* () {
     },
   );
 
+  const setProjectVisibility: PairingGrantStore["Service"]["setProjectVisibility"] = Effect.fn(
+    "PairingGrantStore.setProjectVisibility",
+  )(function* (id, projectVisibility) {
+    const now = yield* DateTime.now;
+    const updated = yield* pairingLinks
+      .setProjectVisibility({
+        id,
+        projectVisibility: encodeProjectVisibility(projectVisibility),
+        now,
+      })
+      .pipe(
+        Effect.mapError(
+          (cause) => new PairingLinkProjectVisibilityError({ pairingLinkId: id, cause }),
+        ),
+      );
+    if (Option.isNone(updated)) return false;
+    if (!updated.value.subject.startsWith(AuthPairingLinks.MCP_APPROVAL_SUBJECT_PREFIX)) {
+      yield* emitUpsert(toPairingLink(updated.value));
+    }
+    return true;
+  });
+
   const issueOneTimeToken: PairingGrantStore["Service"]["issueOneTimeToken"] = Effect.fn(
     "PairingGrantStore.issueOneTimeToken",
   )(function* (input) {
@@ -495,6 +544,7 @@ const make = Effect.gen(function* () {
         label: input?.label ?? null,
         proofKeyThumbprint: input?.proofKeyThumbprint ?? null,
         ...(input?.requiresConnectApproval ? { requiresConnectApproval: true } : {}),
+        projectVisibility: encodeProjectVisibility(input?.projectVisibility),
         createdAt: now,
         expiresAt: expiresAt,
       })
@@ -509,6 +559,7 @@ const make = Effect.gen(function* () {
             }),
         ),
       );
+    const projectVisibility = limitedProjectVisibility(input?.projectVisibility);
     // Purpose-bound codes stay out of the pairing links and QR codes that clients show.
     if (!subject.startsWith(AuthPairingLinks.MCP_APPROVAL_SUBJECT_PREFIX)) {
       yield* emitUpsert({
@@ -518,6 +569,7 @@ const make = Effect.gen(function* () {
         ...(input?.label ? { label: input.label } : {}),
         createdAt: now,
         expiresAt,
+        ...(projectVisibility ? { projectVisibility } : {}),
         ...(input?.requiresConnectApproval && input.proofKeyThumbprint
           ? {
               connectDeviceRequest: {
@@ -669,6 +721,10 @@ const make = Effect.gen(function* () {
           ...(consumed.value.label ? { label: consumed.value.label } : {}),
           ...(consumed.value.proofKeyThumbprint
             ? { proofKeyThumbprint: consumed.value.proofKeyThumbprint }
+            : {}),
+          // Returned by the same statement that spends the link, so an edit cannot slip between.
+          ...(consumed.value.projectVisibility
+            ? { projectVisibility: consumed.value.projectVisibility }
             : {}),
           expiresAt: consumed.value.expiresAt,
         } satisfies BootstrapGrant;
@@ -870,6 +926,7 @@ const make = Effect.gen(function* () {
       return Stream.fromPubSub(changesPubSub);
     },
     revoke,
+    setProjectVisibility,
     consume,
   });
 });

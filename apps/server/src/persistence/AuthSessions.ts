@@ -10,6 +10,7 @@ import * as SqlSchema from "effect/sql/SqlSchema";
 import {
   AuthClientMetadataDeviceType,
   AuthEnvironmentScopes,
+  AuthProjectVisibility,
   AuthSessionId,
   ServerAuthSessionMethod,
 } from "@t3tools/contracts";
@@ -20,6 +21,7 @@ import {
   type PersistenceErrorCorrelation,
   PersistenceSqlError,
 } from "./Errors.ts";
+import { readProjectVisibility } from "./projectVisibility.ts";
 
 export const AuthSessionClientMetadataRecord = Schema.Struct({
   label: Schema.NullOr(Schema.String),
@@ -41,6 +43,7 @@ export const AuthSessionRecord = Schema.Struct({
   expiresAt: Schema.DateTimeUtcFromString,
   lastConnectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
+  projectVisibility: Schema.NullOr(Schema.toType(AuthProjectVisibility)),
 });
 export type AuthSessionRecord = typeof AuthSessionRecord.Type;
 
@@ -53,6 +56,8 @@ export const CreateAuthSessionInput = Schema.Struct({
   issuedAt: Schema.DateTimeUtcFromString,
   expiresAt: Schema.DateTimeUtcFromString,
   proofKeyThumbprint: Schema.optionalKey(Schema.String),
+  /** Stored form from `encodeProjectVisibility`; absent or null shows every project. */
+  projectVisibility: Schema.optionalKey(Schema.NullOr(Schema.String)),
 });
 export type CreateAuthSessionInput = typeof CreateAuthSessionInput.Type;
 
@@ -108,6 +113,12 @@ export const SetAuthSessionLastConnectedAtInput = Schema.Struct({
 });
 export type SetAuthSessionLastConnectedAtInput = typeof SetAuthSessionLastConnectedAtInput.Type;
 
+export const SetAuthSessionProjectVisibilityInput = Schema.Struct({
+  sessionId: AuthSessionId,
+  projectVisibility: Schema.NullOr(Schema.String),
+});
+export type SetAuthSessionProjectVisibilityInput = typeof SetAuthSessionProjectVisibilityInput.Type;
+
 export class AuthSessionRepository extends Context.Service<
   AuthSessionRepository,
   {
@@ -139,6 +150,10 @@ export class AuthSessionRepository extends Context.Service<
     readonly setLastConnectedAt: (
       input: SetAuthSessionLastConnectedAtInput,
     ) => Effect.Effect<void, AuthSessionRepositoryError>;
+    /** Changes a session that is not revoked; false otherwise. */
+    readonly setProjectVisibility: (
+      input: SetAuthSessionProjectVisibilityInput,
+    ) => Effect.Effect<boolean, AuthSessionRepositoryError>;
     readonly getProofKeyThumbprint: (
       input: GetAuthSessionByIdInput,
     ) => Effect.Effect<Option.Option<string>, AuthSessionRepositoryError>;
@@ -163,6 +178,7 @@ const AuthSessionDbRow = Schema.Struct({
   expiresAt: Schema.DateTimeUtcFromString,
   lastConnectedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
   revokedAt: Schema.NullOr(Schema.DateTimeUtcFromString),
+  projectVisibility: Schema.NullOr(Schema.toType(AuthProjectVisibility)),
 });
 
 const AuthSessionRawDbRow = Schema.Struct({
@@ -180,9 +196,14 @@ const AuthSessionRawDbRow = Schema.Struct({
   expiresAt: Schema.Unknown,
   lastConnectedAt: Schema.Unknown,
   revokedAt: Schema.Unknown,
+  projectVisibility: Schema.Unknown,
 });
 
-const decodeAuthSessionDbRow = Schema.decodeUnknownEffect(AuthSessionDbRow);
+const decodeAuthSessionRow = Schema.decodeUnknownEffect(AuthSessionDbRow);
+const decodeAuthSessionDbRow = (row: typeof AuthSessionRawDbRow.Type) =>
+  readProjectVisibility(row.projectVisibility).pipe(
+    Effect.flatMap((projectVisibility) => decodeAuthSessionRow({ ...row, projectVisibility })),
+  );
 
 function toAuthSessionRecord(row: typeof AuthSessionDbRow.Type): AuthSessionRecord {
   return {
@@ -202,6 +223,7 @@ function toAuthSessionRecord(row: typeof AuthSessionDbRow.Type): AuthSessionReco
     expiresAt: row.expiresAt,
     lastConnectedAt: row.lastConnectedAt,
     revokedAt: row.revokedAt,
+    projectVisibility: row.projectVisibility,
   };
 }
 
@@ -243,7 +265,8 @@ export const make = Effect.gen(function* () {
           issued_at,
           expires_at,
           revoked_at,
-          proof_key_thumbprint
+          proof_key_thumbprint,
+          project_visibility
         )
         VALUES (
           ${input.sessionId},
@@ -259,7 +282,8 @@ export const make = Effect.gen(function* () {
           ${input.issuedAt},
           ${input.expiresAt},
           NULL,
-          ${input.proofKeyThumbprint ?? null}
+          ${input.proofKeyThumbprint ?? null},
+          ${input.projectVisibility ?? null}
         )
         ${ignoreExisting ? sql`ON CONFLICT(session_id) DO NOTHING` : sql``}
       `,
@@ -286,7 +310,8 @@ export const make = Effect.gen(function* () {
           issued_at AS "issuedAt",
           expires_at AS "expiresAt",
           last_connected_at AS "lastConnectedAt",
-          revoked_at AS "revokedAt"
+          revoked_at AS "revokedAt",
+          project_visibility AS "projectVisibility"
         FROM auth_sessions
         WHERE session_id = ${sessionId}
       `,
@@ -330,7 +355,8 @@ export const make = Effect.gen(function* () {
           issued_at AS "issuedAt",
           expires_at AS "expiresAt",
           last_connected_at AS "lastConnectedAt",
-          revoked_at AS "revokedAt"
+          revoked_at AS "revokedAt",
+          project_visibility AS "projectVisibility"
         FROM auth_sessions
         WHERE revoked_at IS NULL
           AND (expires_at > ${now} OR ${sql.in("session_id", connectedSessionIds)})
@@ -373,6 +399,19 @@ export const make = Effect.gen(function* () {
           AND revoked_at IS NULL
           AND expires_at > ${now}
           AND (${onlyIfExpiresBy ?? null} IS NULL OR expires_at <= ${onlyIfExpiresBy ?? null})
+        RETURNING session_id AS "sessionId"
+      `,
+  });
+
+  const setProjectVisibilityRows = SqlSchema.findAll({
+    Request: SetAuthSessionProjectVisibilityInput,
+    Result: Schema.Struct({ sessionId: AuthSessionId }),
+    execute: ({ sessionId, projectVisibility }) =>
+      sql`
+        UPDATE auth_sessions
+        SET project_visibility = ${projectVisibility}
+        WHERE session_id = ${sessionId}
+          AND revoked_at IS NULL
         RETURNING session_id AS "sessionId"
       `,
   });
@@ -537,6 +576,18 @@ export const make = Effect.gen(function* () {
       Effect.map((rows) => rows.length > 0),
     );
 
+  const setProjectVisibility: AuthSessionRepository["Service"]["setProjectVisibility"] = (input) =>
+    setProjectVisibilityRows(input).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "AuthSessionRepository.setProjectVisibility:query",
+          "AuthSessionRepository.setProjectVisibility:decodeRows",
+          { sessionId: input.sessionId },
+        ),
+      ),
+      Effect.map((rows) => rows.length > 0),
+    );
+
   const revokeAllExcept: AuthSessionRepository["Service"]["revokeAllExcept"] = (input) =>
     revokeOtherSessionRows(input).pipe(
       Effect.mapError(
@@ -598,6 +649,7 @@ export const make = Effect.gen(function* () {
     setLastConnectedAt,
     getProofKeyThumbprint,
     revokeByProofKey,
+    setProjectVisibility,
   } satisfies AuthSessionRepository["Service"];
 });
 

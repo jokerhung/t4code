@@ -30,6 +30,8 @@ import {
   AuthMcpTokenResult,
   AuthPairingCredentialResult,
   AuthRevokeClientSessionInput,
+  AuthUpdateProjectVisibilityInput,
+  AuthUpdateProjectVisibilityResult,
   AuthRevokePairingLinkInput,
   AuthApproveConnectDeviceInput,
   AuthApproveConnectDeviceResult,
@@ -147,6 +149,7 @@ export const EnvironmentInternalErrorReason = Schema.Literals([
   "pairing_link_revoke_failed",
   "client_sessions_load_failed",
   "client_session_revoke_failed",
+  "project_visibility_update_failed",
   "connect_device_approve_failed",
   "connect_device_revoke_failed",
   "project_snapshot_failed",
@@ -667,6 +670,14 @@ class EnvironmentAuthHttpApi extends HttpApiGroup.make("auth")
       headers: OptionalBearerHeaders,
       payload: AuthRevokeConnectDeviceInput,
       success: AuthRevokeConnectDeviceResult,
+      error: EnvironmentScopedOperationErrors,
+    }).middleware(EnvironmentAuthenticatedAuth),
+  )
+  .add(
+    HttpApiEndpoint.post("projectVisibility", "/api/auth/project-visibility", {
+      headers: OptionalBearerHeaders,
+      payload: AuthUpdateProjectVisibilityInput,
+      success: AuthUpdateProjectVisibilityResult,
       error: EnvironmentScopedOperationErrors,
     }).middleware(EnvironmentAuthenticatedAuth),
   )

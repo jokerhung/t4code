@@ -7,6 +7,8 @@ import {
   type AuthClientSession,
   type AuthEnvironmentScope,
   AuthWebSocketTicketUse,
+  type AuthProjectVisibility,
+  type ProjectId,
   RuntimeMode,
   type ServerAuthSessionMethod,
 } from "@t3tools/contracts";
@@ -19,12 +21,17 @@ import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as Option from "effect/Option";
 
 import * as ServerConfig from "../config.ts";
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
 import * as AuthSessions from "../persistence/AuthSessions.ts";
+import {
+  encodeProjectVisibility,
+  limitedProjectVisibility,
+} from "../persistence/projectVisibility.ts";
 import type {
   ServerAuthInternalError,
   ServerAuthInvalidCredentialError,
@@ -412,6 +419,7 @@ export class SessionStore extends Context.Service<
       readonly proofKeyThumbprint?: string;
       readonly runtimeModeCeiling?: RuntimeMode;
       readonly peerLink?: boolean;
+      readonly projectVisibility?: AuthProjectVisibility;
       readonly replaceActiveForSubjectAndMethod?: boolean;
       readonly replaceSessionId?: AuthSessionId;
       /** Keeps the session alive this long past each renewal; `ttl` then bounds only the token. */
@@ -473,6 +481,20 @@ export class SessionStore extends Context.Service<
     readonly revoke: (
       sessionId: AuthSessionId,
     ) => Effect.Effect<boolean, SessionCredentialInternalError>;
+    /** False when the session is revoked or unknown. The socket stays open. */
+    readonly setProjectVisibility: (
+      sessionId: AuthSessionId,
+      projectVisibility: AuthProjectVisibility,
+    ) => Effect.Effect<boolean, SessionCredentialInternalError>;
+    /** Adds a project to a limited session's list; does nothing for one that shows every project. */
+    readonly revealProject: (
+      sessionId: AuthSessionId,
+      projectId: ProjectId,
+    ) => Effect.Effect<void, SessionCredentialInternalError>;
+    /** The session's current visibility, then each change to it. */
+    readonly streamProjectVisibility: (
+      sessionId: AuthSessionId,
+    ) => Stream.Stream<AuthProjectVisibility, SessionCredentialInternalError>;
     readonly revokeAllExcept: (
       sessionId: AuthSessionId,
     ) => Effect.Effect<number, SessionCredentialInternalError>;
@@ -566,6 +588,9 @@ const make = Effect.gen(function* () {
   );
   const connectedSessionsRef = yield* Ref.make(new Map<AuthSessionId, number>());
   const changesPubSub = yield* PubSub.unbounded<SessionCredentialChange>();
+  const projectVisibilityChanges = yield* PubSub.unbounded<AuthSessionId>();
+  // Revealing a project reads the list before writing it, so edits take turns with it.
+  const projectVisibilityLock = yield* Semaphore.make(1);
   // Newest session per DPoP key. A live socket moves to it at expiry, so a
   // client that renews its short-lived token keeps its socket.
   const latestSessionByProofKey = new Map<string, AuthSessionId>();
@@ -642,6 +667,7 @@ const make = Effect.gen(function* () {
         expiresAt: row.value.expiresAt,
         lastConnectedAt: row.value.lastConnectedAt,
         connected,
+        ...(row.value.projectVisibility ? { projectVisibility: row.value.projectVisibility } : {}),
       }),
     );
   });
@@ -771,6 +797,7 @@ const make = Effect.gen(function* () {
         issuedAt,
         expiresAt: sessionExpiresAt,
         ...(claims.jkt ? { proofKeyThumbprint: claims.jkt } : {}),
+        projectVisibility: encodeProjectVisibility(input?.projectVisibility),
       } satisfies AuthSessions.CreateAuthSessionInput;
       const replacedSessionIds = yield* (
         input?.replaceSessionId !== undefined || input?.replaceActiveForSubjectAndMethod
@@ -784,6 +811,7 @@ const make = Effect.gen(function* () {
           : authSessions.create(sessionRecord).pipe(Effect.as([] as ReadonlyArray<AuthSessionId>))
       ).pipe(Effect.mapError((cause) => new SessionCredentialIssueError({ sessionId, cause })));
       if (claims.jkt) latestSessionByProofKey.set(claims.jkt, sessionId);
+      const limitedVisibility = limitedProjectVisibility(input?.projectVisibility);
       if (replacedSessionIds.length > 0) {
         yield* Ref.update(connectedSessionsRef, (current) => {
           const next = new Map(current);
@@ -808,6 +836,7 @@ const make = Effect.gen(function* () {
           expiresAt: sessionExpiresAt,
           lastConnectedAt: null,
           connected: false,
+          ...(limitedVisibility ? { projectVisibility: limitedVisibility } : {}),
         }),
       );
 
@@ -1175,6 +1204,7 @@ const make = Effect.gen(function* () {
           expiresAt: row.expiresAt,
           lastConnectedAt: row.lastConnectedAt,
           connected: connectedSessions.has(row.sessionId),
+          ...(row.projectVisibility ? { projectVisibility: row.projectVisibility } : {}),
         }),
       );
     },
@@ -1201,6 +1231,79 @@ const make = Effect.gen(function* () {
       return revoked;
     },
   );
+
+  const readProjectVisibilityRow = (sessionId: AuthSessionId) =>
+    authSessions
+      .getById({ sessionId })
+      .pipe(
+        Effect.mapError((cause) => new SessionCredentialVerificationError({ sessionId, cause })),
+      );
+
+  const writeProjectVisibility = Effect.fnUntraced(function* (
+    sessionId: AuthSessionId,
+    projectVisibility: AuthProjectVisibility,
+  ) {
+    const updated = yield* authSessions
+      .setProjectVisibility({
+        sessionId,
+        projectVisibility: encodeProjectVisibility(projectVisibility),
+      })
+      .pipe(
+        Effect.mapError((cause) => new SessionCredentialVerificationError({ sessionId, cause })),
+      );
+    if (!updated) return false;
+    yield* PubSub.publish(projectVisibilityChanges, sessionId);
+    const session = yield* loadActiveSession(sessionId).pipe(
+      Effect.mapError((cause) => new SessionCredentialVerificationError({ sessionId, cause })),
+    );
+    if (Option.isSome(session)) yield* emitUpsert(session.value);
+    return true;
+  });
+
+  const setProjectVisibility: SessionStore["Service"]["setProjectVisibility"] = (
+    sessionId,
+    projectVisibility,
+  ) =>
+    writeProjectVisibility(sessionId, projectVisibility).pipe(
+      projectVisibilityLock.withPermits(1),
+      Effect.withSpan("SessionStore.setProjectVisibility"),
+    );
+
+  const revealProject: SessionStore["Service"]["revealProject"] = Effect.fn(
+    "SessionStore.revealProject",
+  )(function* (sessionId, projectId) {
+    const row = yield* readProjectVisibilityRow(sessionId);
+    const current = Option.getOrUndefined(row)?.projectVisibility;
+    if (current?.mode !== "selected" || current.projectIds.includes(projectId)) return;
+    yield* writeProjectVisibility(sessionId, {
+      mode: "selected",
+      projectIds: [...current.projectIds, projectId],
+    });
+  }, projectVisibilityLock.withPermits(1));
+
+  const streamProjectVisibility: SessionStore["Service"]["streamProjectVisibility"] = (
+    sessionId,
+  ) => {
+    const current = readProjectVisibilityRow(sessionId).pipe(
+      Effect.map(
+        (row): AuthProjectVisibility =>
+          Option.getOrUndefined(row)?.projectVisibility ?? { mode: "all" },
+      ),
+    );
+    return Stream.unwrap(
+      Effect.gen(function* () {
+        // Subscribe before reading, so an edit during the first read is not missed.
+        const subscription = yield* PubSub.subscribe(projectVisibilityChanges);
+        return Stream.concat(
+          Stream.fromEffect(current),
+          Stream.fromSubscription(subscription).pipe(
+            Stream.filter((changed) => changed === sessionId),
+            Stream.mapEffect(() => current),
+          ),
+        );
+      }),
+    );
+  };
 
   const proofKeyThumbprintOf: SessionStore["Service"]["proofKeyThumbprintOf"] = (sessionId) =>
     authSessions
@@ -1353,6 +1456,9 @@ const make = Effect.gen(function* () {
       return Stream.fromPubSub(changesPubSub);
     },
     revoke,
+    setProjectVisibility,
+    revealProject,
+    streamProjectVisibility,
     revokeAllExcept,
     proofKeyThumbprintOf,
     revokeByProofKey,

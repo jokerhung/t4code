@@ -5,14 +5,26 @@ import {
   getProjectOrderKey,
   selectProjectGroupingSettings,
 } from "@t3tools/client-runtime/state/project-grouping";
+import {
+  EVERY_ENVIRONMENT,
+  filterListed,
+  projectListFilter,
+  type VisibilityByEnvironment,
+} from "../projectVisibility.logic";
 import { buildSidebarProjectSnapshots } from "../sidebarProjectGrouping";
 import { useEnvironmentIdentities, usePrimaryEnvironmentId } from "../state/environments";
 import { useDelegatedUnderParent, useProjects, useQuietThreadShells } from "../state/entities";
 import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
 import { useClientSettings } from "./useSettings";
 
-export function useSidebarProjectGroups() {
-  const projects = useProjects();
+/** `visibility` limits the groups to the projects this device lists; other callers see all. */
+export function useSidebarProjectGroups(visibility: VisibilityByEnvironment = EVERY_ENVIRONMENT) {
+  const allProjects = useProjects();
+  // Filtered before grouping, so a hidden checkout cannot shape a group and an empty group goes.
+  const isListed = projectListFilter(visibility);
+  const projects = filterListed(allProjects, visibility, (project) =>
+    isListed(project.environmentId, project.id),
+  );
   // Activity order lags a running thread's streaming ticks until its next
   // real change; reading every tick re-rendered the whole sidebar with it.
   const threads = useQuietThreadShells();

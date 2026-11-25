@@ -1346,6 +1346,13 @@
   "75b6d7c3bc9c72da": "Could not open in {editor}",
   "415d9fed5542d278": "Could not open file",
   "1d1bbe5b700afe63": "Unable to reveal file",
+  "5004547dc22a40db": "Download",
+  "283ca6094d71ee00": "Copy download link",
+  "68883cb3342998e5": "Reconnect to the environment and try again.",
+  "fd15f50f32d75b11": "Download link copied",
+  "35fbaff8b7b889d7": "This temporary link lets you download the file directly.",
+  "075d454a45aabc87": "Unable to download file",
+  "448735c0084132f5": "Try again.",
   "31dc19d033af2774": "Unable to open link.",
   "029d8d0201aed231": "Unable to open System Settings.",
   "9af3083226778d3c": "Open VSX returned malformed theme details.",
@@ -1441,7 +1448,6 @@
   "b33ee2521fc7686e": "Plan preview unavailable.",
   "b48540ebc8788b76": "ChatGPT sign-in couldn't finish",
   "52e824623cffe356": "Return to the provider and try again.",
-  "68883cb3342998e5": "Reconnect to the environment and try again.",
   "cb4b97318340b585": "Device",
   "d407926eb12273d6": "Usage limit reached",
   "81d48ad533f04c08": "Provider error",
@@ -1967,7 +1973,6 @@
   "8bf65a425f50d140": "Light",
   "d604bc5cf3386f00": "Dark",
   "4758dde317babc14": "Couldn't save theme selection",
-  "448735c0084132f5": "Try again.",
   "e1ef4197dc810bab": "For light mode",
   "002fa063deda988d": "For dark mode",
   "9c6962c66efa5668": "Change appearance",
@@ -2670,6 +2675,7 @@
   "fcaffe60c85338e2": "Could not load older threads. Retry",
   "43acfc82011a8fc2": "{count, plural, one {Show {count} more} other {Show {count} more}}",
   "08ff4b5e32bc46b8": "No matching projects.",
+  "dfc1b00923b10bee": "No projects are selected for this device",
   "6392f9e0f61ae70c": "No projects yet",
   "19df05d390e2c3ae": "Show all projects",
   "84fa7d3765db7e84": "No threads yet",
@@ -3212,10 +3218,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "on the computer that opened this page"
-      ]
+      "c": [" ", "on the computer that opened this page"]
     }
   ],
   "b2d53b4d1d48fbef": [
@@ -3227,10 +3230,7 @@
     {
       "t": "span",
       "i": 2,
-      "c": [
-        " ",
-        "· whoever runs it gets this access"
-      ]
+      "c": [" ", "· whoever runs it gets this access"]
     }
   ],
   "c54cc9c75db9dc58": "Only approve a sign-in you just started.",
@@ -3526,7 +3526,7 @@
   "0a6fbecab03f7ef3": "No matching files or folders.",
   "0e7b21ab11721ca7": "No matching command.",
   "5ab455b91b4b59e6": "5-hour limit",
-  "7c26c5915da68332": "Weekly ? all models",
+  "67a60f4245f0a211": "Weekly · all models",
   "a78cd5e9ba29195c": "Resets at {time}",
   "c0c3aa756405c1df": "Resets {time}",
   "9d2fc1003e82feb1": "Usage",
@@ -7699,6 +7699,7 @@
   "1565dfce5dec4b82": "Create pairing link",
   "b40e476b23c85e10": "Generate a one-time link that another device can use to pair with this backend as an authorized client.",
   "f9688fef8cc2ff10": "Client label (optional)",
+  "4a159a7988821045": "Select at least one project.",
   "f65d50129cd76fd7": "Limit what the paired client can do.",
   "4e3d361728cb9b37": "Read only",
   "e9b142be5c4b1e9a": "Select at least one permission.",
@@ -9329,6 +9330,18 @@
   "3310e10f1efdc9bd": "Choose icon",
   "65ccf4f8e049003e": "Choose a project to manage its name, icon, checkouts and actions.",
   "067beea7d8f6e2c9": "Show all environments",
+  "02155a6c2ff34c49": "{count} selected",
+  "53f2b5cf86263a9b": "This link was already used. Edit the device it paired.",
+  "b8e70f9a8c35f493": "This device is no longer paired.",
+  "837998c5773b0f37": "Could not update the shown projects",
+  "c9650f8c03e56e70": "Edit shown projects: {summary}",
+  "2b7bc88266409180": "Projects shown on this device",
+  "a97703cf2b121297": "This only hides projects from the sidebar. It does not block access to them.",
+  "a460f7c807eb8cc2": "All projects, including new ones",
+  "14ea81e95c62c0f1": "Only selected projects",
+  "4f113bb0bc732b3d": "Clear",
+  "63c497019acd7780": "Shown projects",
+  "5869c6e410ee77c0": "Choose what this device lists. It updates without pairing again.",
   "1bf6da50131340d4": "Accent color hue",
   "21b0794e20eb46c4": "Custom hex accent color",
   "e69555836cf65e6d": "Change accent color for {provider}",
@@ -10229,7 +10242,6 @@
   "8c24e88e226fce57": "Install failed.",
   "132b21b672824737": "Could not check for updates",
   "d1c62f207937d80b": "Update check failed.",
-  "5004547dc22a40db": "Download",
   "7d04c4f0bdb67741": "Up to Date",
   "943047215ad556d5": "Check for Updates",
   "a474bef3f2ff5815": "Update available.",
