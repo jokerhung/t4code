@@ -1,14 +1,14 @@
 import { afterEach, expect, it, vi } from "vite-plus/test";
 import { openDirectDownload } from "./directDownload";
 
+vi.mock("../env", () => ({ isElectron: false }));
+vi.mock("../localApi", () => ({ readLocalApi: () => undefined }));
 afterEach(() => vi.unstubAllGlobals());
 
-it("downloads the HTTP attachment without opening a tab or fetching file bytes", async () => {
-  const anchor = { href: "", download: undefined, target: "", click: vi.fn(), remove: vi.fn() };
-  const createElement = vi.fn(() => anchor);
-  const open = vi.fn();
+it("reserves a tab before the URL is ready and lets the browser download over HTTP", async () => {
+  const tab = { opener: {}, closed: false, location: { replace: vi.fn() }, close: vi.fn() };
+  const open = vi.fn(() => tab);
   const fetch = vi.fn();
-  vi.stubGlobal("document", { createElement, body: { append: vi.fn() } });
   vi.stubGlobal("window", { open });
   vi.stubGlobal("fetch", fetch);
   let ready!: (url: string) => void;
@@ -16,25 +16,24 @@ it("downloads the HTTP attachment without opening a tab or fetching file bytes",
     ready = resolve;
   });
   const download = openDirectDownload(() => url);
-  expect(createElement).not.toHaveBeenCalled();
+  expect(open).toHaveBeenCalledWith("about:blank", "_blank");
+  expect(tab.opener).toBeNull();
+  expect(tab.location.replace).not.toHaveBeenCalled();
   ready("https://host.example/api/assets/file?token=test");
   await download;
-  expect(anchor.href).toBe("https://host.example/api/assets/file?token=test");
-  expect(anchor.download).toBe("");
-  expect(anchor.target).toBe("");
-  expect(anchor.click).toHaveBeenCalledOnce();
-  expect(anchor.remove).toHaveBeenCalledOnce();
-  expect(open).not.toHaveBeenCalled();
+  expect(tab.location.replace).toHaveBeenCalledWith(
+    "https://host.example/api/assets/file?token=test",
+  );
   expect(fetch).not.toHaveBeenCalled();
 });
 
-it("does not navigate when preparing a download link fails", async () => {
-  const createElement = vi.fn();
-  vi.stubGlobal("document", { createElement });
+it("closes the reserved tab when preparing the link fails", async () => {
+  const tab = { opener: null, closed: false, close: vi.fn() };
+  vi.stubGlobal("window", { open: () => tab });
   await expect(
     openDirectDownload(async () => {
       throw new Error("offline");
     }),
   ).rejects.toThrow("offline");
-  expect(createElement).not.toHaveBeenCalled();
+  expect(tab.close).toHaveBeenCalledOnce();
 });

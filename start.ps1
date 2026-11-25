@@ -51,10 +51,9 @@ try {
     }
   }
 
-  if (-not (Test-Path node_modules)) {
-    Write-Host '[start] Cai dependencies...'
-    Invoke-Step { vp i }
-  }
+  # pnpm repairs interrupted installs and quickly reuses an up-to-date installation.
+  Write-Host '[start] Cai dependencies...'
+  Invoke-Step { vp i }
 
   if ($Dev) {
     Write-Host '[start] Starting dev server (vp run dev)...'

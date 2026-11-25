@@ -1,14 +1,27 @@
-/** The signed response supplies the attachment filename and streams bytes over HTTP. */
+import { isElectron } from "../env";
+import { readLocalApi } from "../localApi";
+
+/** Reserve the tab during the click, before preparing a signed HTTP URL. */
 export async function openDirectDownload(prepareUrl: () => Promise<string | null>) {
-  const url = await prepareUrl();
-  if (!url) throw new Error("Download URL unavailable");
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = "";
-  document.body.append(anchor);
+  const tab = isElectron ? null : window.open("about:blank", "_blank");
+  if (tab) tab.opener = null;
   try {
-    anchor.click();
-  } finally {
-    anchor.remove();
+    const url = await prepareUrl();
+    if (!url) throw new Error("Download URL unavailable");
+    if (isElectron) await readLocalApi()?.shell.openExternal(url);
+    else if (tab) {
+      if (!tab.closed) tab.location.replace(url);
+    } else {
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.target = "_blank";
+      anchor.rel = "noopener";
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+    }
+  } catch (error) {
+    tab?.close();
+    throw error;
   }
 }
