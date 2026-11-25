@@ -148,11 +148,7 @@ export function AttachmentFilePreview(props: {
       }
     : null;
   const resource = assetResource ?? attachmentResource;
-  const downloadResource = resource
-    ? resource._tag === "draft-workspace-file"
-      ? resource
-      : { ...resource, disposition: "attachment" as const }
-    : null;
+  const downloadResource = resource ? { ...resource, disposition: "attachment" as const } : null;
   const refresh = useAssetUrlRefresh(
     props.file ? null : (props.asset?.environmentId ?? null),
     props.file ? null : resource,

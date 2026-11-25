@@ -524,19 +524,19 @@ function WorkspaceDocumentPreview(props: {
   readonly workspaceMutationId: string | null;
   readonly refreshRevision: number;
 }) {
-  const resource =
-    props.draft && props.document
-      ? {
-          _tag: "draft-workspace-file" as const,
-          cwd: props.workspaceRoot,
-          path: props.absolutePath,
-        }
-      : {
-          _tag: "media-file" as const,
-          threadId: props.threadRef.threadId,
-          path: props.absolutePath,
-          ...(props.document ? {} : { disposition: "attachment" as const }),
-        };
+  const resource = props.draft
+    ? {
+        _tag: "draft-workspace-file" as const,
+        cwd: props.workspaceRoot,
+        path: props.absolutePath,
+        ...(props.document ? {} : { disposition: "attachment" as const }),
+      }
+    : {
+        _tag: "media-file" as const,
+        threadId: props.threadRef.threadId,
+        path: props.absolutePath,
+        ...(props.document ? {} : { disposition: "attachment" as const }),
+      };
   const gt = useGT();
   // Drafts keep reloading on every workspace mutation, as before.
   const revisioned = resource._tag === "media-file";
