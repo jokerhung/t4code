@@ -1,3 +1,4 @@
+import { ComposerContextUsage } from "./ComposerContextUsage";
 import type { ChatComposerProps } from "./ChatComposer";
 import type { PromptUltrathink } from "./TraitsPicker";
 import type { ProviderInstanceEntry } from "../../providerInstances";
@@ -41,6 +42,9 @@ import { resolveComposerControlsOwnership } from "./composerControlsOwnership";
 const MODEL_TRIGGER_STATES = "data-popup-open:bg-accent data-popup-open:text-foreground";
 
 export function ComposerControlsBar(props: {
+  usageProviders?: readonly ServerProvider[] | undefined;
+  usageSources?: ChatComposerProps["usageLimitSources"];
+  contextWindow?: ChatComposerProps["contextWindow"];
   environmentId: EnvironmentId;
   workspaceCwd: string | null;
   routeKind: ChatComposerProps["routeKind"];
@@ -266,6 +270,16 @@ export function ComposerControlsBar(props: {
   ) : (
     <>
       {composerModelPicker}
+      <ComposerContextUsage
+        usage={props.contextWindow ?? null}
+        size={controlSize}
+        limits={{
+          providerInstanceId: selectedInstanceId,
+          model: selectedModel,
+          providers: props.usageProviders ?? [],
+          sources: props.usageSources ?? [],
+        }}
+      />
 
       <>
         {restingBlockDefs.map((def, index) => {

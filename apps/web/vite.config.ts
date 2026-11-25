@@ -8,7 +8,7 @@ import compression from "compression";
 import { playwright } from "vite-plus/test/browser-playwright";
 import { defineProject, type TestProjectInlineConfiguration } from "vite-plus/test/config";
 import "vite-plus/test/config";
-import { defineConfig, type Connect, type Plugin } from "vite-plus";
+import { defineConfig, type Connect, type Plugin, type ProxyOptions } from "vite-plus";
 import * as Hash from "effect/Hash";
 import pkg from "./package.json" with { type: "json" };
 import pdfjsPkg from "pdfjs-dist/package.json" with { type: "json" };
@@ -286,7 +286,7 @@ function bootstrapTitlePlugin(): Plugin {
         hostedAppChannel: configuredHostedAppChannel,
         development,
       });
-      const title = formatAppDisplayName({ baseName: "T3 Code", stageLabel });
+      const title = formatAppDisplayName({ baseName: "VB Code", stageLabel });
       return html.replace(/<title>[^<]*<\/title>/, `<title>${title}</title>`);
     },
   };
@@ -402,6 +402,19 @@ export default defineConfig(({ command }) => {
                   target: devProxyTarget,
                   changeOrigin: !DEV_PROXIED_ORIGIN_PRESERVING_PREFIXES.has(prefix),
                   ...(prefix === "/ws" || prefix === "/api" ? { ws: true } : {}),
+                  // changeOrigin rewrites Host, but the server checks a cookie socket's Origin
+                  // against it, and plain-HTTP LAN pages send no Sec-Fetch-Site to vouch.
+                  ...(prefix === "/api"
+                    ? {
+                        configure: ((proxy) => {
+                          proxy.on("proxyReqWs", (proxyReq, request) => {
+                            if (request.headers.host) {
+                              proxyReq.setHeader("x-forwarded-host", request.headers.host);
+                            }
+                          });
+                        }) satisfies ProxyOptions["configure"],
+                      }
+                    : {}),
                 },
               ]),
             ),

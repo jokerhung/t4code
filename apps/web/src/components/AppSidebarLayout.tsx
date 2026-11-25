@@ -1,6 +1,5 @@
 import { useAtomValue } from "@effect/atom-react";
 import { useGT } from "gt-react";
-import * as Schema from "effect/Schema";
 import {
   useEffect,
   useState,
@@ -18,7 +17,7 @@ import {
   threadUndoClaimsShortcut,
   undoLatestThreadAction,
 } from "../hooks/showThreadUndoNotice";
-import { getLocalStorageItem, removeLocalStorageItem } from "../hooks/useLocalStorage";
+import { removeLocalStorageItem } from "../hooks/useLocalStorage";
 import {
   isRichTextBoldShortcut,
   isSidebarToggleShortcut,
@@ -114,17 +113,6 @@ function readWindowFullscreen(): boolean {
       typeof getWindowFullscreenState === "function" ? getWindowFullscreenState() : false;
   }
   return windowFullscreenSnapshot;
-}
-
-function readInitialThreadSidebarWidth(): number {
-  try {
-    return resolveInitialThreadSidebarWidth(
-      getLocalStorageItem(THREAD_SIDEBAR_WIDTH_STORAGE_KEY, Schema.Finite),
-    );
-  } catch (error) {
-    console.error("Could not read persisted thread sidebar width.", error);
-    return resolveInitialThreadSidebarWidth(null);
-  }
 }
 
 function readUsagePageOpen(router: AnyRouter) {
@@ -436,7 +424,7 @@ export function AppSidebarLayout({
   const panelAnimationsSuppressed = usePanelNavigationSuppression(pathname);
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
-  const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
+  const [sidebarWidth, setSidebarWidth] = useState(resolveInitialThreadSidebarWidth);
   // A clamped drag may not change width, so viewport changes need a separate subscription.
   const viewportWidth = useSyncExternalStore(subscribeToViewportWidth, readViewportWidth);
   const [brandWidth, setBrandWidth] = useState(0);
@@ -448,7 +436,7 @@ export function AppSidebarLayout({
     } catch (error) {
       console.error("Could not clear persisted thread sidebar width.", error);
     }
-    setSidebarWidth(resolveInitialThreadSidebarWidth(null));
+    setSidebarWidth(resolveInitialThreadSidebarWidth());
   };
   const isWindowFullscreen = useSyncExternalStore(
     subscribeToWindowFullscreen,

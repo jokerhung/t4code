@@ -31,6 +31,7 @@ const SIDE_CHAT_PANE_COMMANDS: ReadonlySet<KeybindingCommand> = new Set([
 
 interface ChatShortcutsInput {
   readonly enabled: boolean;
+  readonly composerAvailable?: boolean;
   /**
    * A side chat inside another chat leaves the window to the outer chat. It listens on its
    * side chat pane, around `composerElement`: find and Escape closing it anywhere in the pane,
@@ -79,6 +80,7 @@ export function useChatShortcuts(input: ChatShortcutsInput) {
     const shortcutContext = input.getShortcutContext(event.target);
 
     if (
+      input.composerAvailable !== false &&
       !inSideChatPane &&
       !shortcutContext.terminalFocus &&
       !shortcutContext.modelPickerOpen &&

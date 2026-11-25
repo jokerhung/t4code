@@ -21,7 +21,7 @@ import { formatComposerContextReference } from "@t3tools/shared/composerContextR
 import type { Editor } from "@tiptap/core";
 import { redoDepth, undoDepth } from "@tiptap/pm/history";
 import { NodeSelection } from "@tiptap/pm/state";
-import { createElement, createRef, useEffect, useState } from "react";
+import { Activity, createElement, createRef, useEffect, useState } from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 import { cdp, userEvent } from "vite-plus/test/browser";
 
@@ -1429,4 +1429,34 @@ it("lets a one-line placeholder's button take clicks and passes the rest to the 
   await vi.waitFor(() => expect(editor.view.hasFocus()).toBe(true));
   await userEvent.click(screen.getByRole("button", { name: "Tab" }));
   expect(onClick).toHaveBeenCalledOnce();
+});
+
+it("restores an editor after its hidden Activity destroys the previous view", async () => {
+  await using screen = await render(<Activity mode="visible">{composer("saved draft")}</Activity>);
+  const previous = editorIn(screen.container);
+  await screen.rerender(<Activity mode="hidden">{composer("saved draft")}</Activity>);
+  await vi.waitFor(() => expect(previous.isDestroyed).toBe(true));
+  await screen.rerender(<Activity mode="visible">{composer("saved draft")}</Activity>);
+  const restored = editorIn(screen.container);
+  expect(restored.isDestroyed).toBe(false);
+  expect(restored.getText()).toBe("saved draft");
+  await userEvent.click(restored.view.dom);
+  await userEvent.keyboard("{End}!");
+  await vi.waitFor(() => expect(restored.getText()).toBe("saved draft!"));
+});
+
+it("recovers when a discarded editor view reappears before the passive editor refresh", async () => {
+  await using screen = await render(
+    <Activity mode="visible">{composer("retained draft")}</Activity>,
+  );
+  const previous = editorIn(screen.container);
+  await act(() => previous.destroy());
+  await screen.rerender(<Activity mode="hidden">{composer("retained draft")}</Activity>);
+  await screen.rerender(<Activity mode="visible">{composer("retained draft")}</Activity>);
+  const restored = editorIn(screen.container);
+  expect(restored.isDestroyed).toBe(false);
+  expect(restored.getText()).toBe("retained draft");
+  await userEvent.click(restored.view.dom);
+  await userEvent.keyboard("{End}!");
+  await vi.waitFor(() => expect(restored.getText()).toBe("retained draft!"));
 });

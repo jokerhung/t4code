@@ -251,6 +251,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
 
 export interface PersistentThreadTerminalPanelProps {
   visible: boolean;
+  projectRef?: ScopedProjectRef | undefined;
   threadRef: ScopedThreadRef;
   surface: Extract<RightPanelSurface, { kind: "terminal" }>;
   launchContext: PersistentTerminalLaunchContext | null;
@@ -269,6 +270,7 @@ export interface PersistentThreadTerminalPanelProps {
 
 export const PersistentThreadTerminalPanel = memo(function PersistentThreadTerminalPanel({
   visible,
+  projectRef: projectOverride,
   threadRef,
   surface,
   launchContext,
@@ -292,7 +294,7 @@ export const PersistentThreadTerminalPanel = memo(function PersistentThreadTermi
     : draftThread
       ? scopeProjectRef(draftThread.environmentId, draftThread.projectId)
       : null;
-  const project = useProject(projectRef);
+  const project = useProject(projectOverride ?? projectRef);
   const knownTerminalSessions = useKnownTerminalSessions({
     environmentId: threadRef.environmentId,
     threadId: threadRef.threadId,

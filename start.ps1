@@ -9,16 +9,15 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 
-# Nap .env (KEY=VALUE); bien da co trong moi truong duoc uu tien.
+# Nap .env (KEY=VALUE). .env ghi de bien co san: bien nap lan truoc con lai trong cua so
+# PowerShell (va terminal trong T3 Code ke thua T3CODE_*) se che mat gia tri moi.
 $envFile = Join-Path $PSScriptRoot '.env'
 if (Test-Path $envFile) {
   foreach ($line in Get-Content -LiteralPath $envFile) {
     if ($line -match '^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*?)\s*$') {
       $key = $Matches[1]
       $value = $Matches[2].Trim('"', "'")
-      if (-not [Environment]::GetEnvironmentVariable($key)) {
-        [Environment]::SetEnvironmentVariable($key, $value, 'Process')
-      }
+      [Environment]::SetEnvironmentVariable($key, $value, 'Process')
     }
   }
 }

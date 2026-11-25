@@ -1625,7 +1625,7 @@ function ComposerPromptEditorTiptapInner(
   const resumeEditingFocusRef = useRef(false);
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- preserves native selection focus across temporarily making the editor read-only for dictation
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     if (disabled && editor.isEditable) resumeEditingFocusRef.current = editor.view.hasFocus();
     editor.setEditable(!disabled);
     if (!resumeEditingFocusRef.current) return;
@@ -1660,7 +1660,7 @@ function ComposerPromptEditorTiptapInner(
 
   const readSnapshot = () => {
     const snapshot = snapshotRef.current;
-    if (!editor) return snapshot;
+    if (!editor || editor.isDestroyed) return snapshot;
     const map = serializeEditorDoc(editor.state.doc);
     const { from, to } = editor.state.selection;
     const fromFlat = pmToFlat(map, from);
@@ -1716,7 +1716,7 @@ function ComposerPromptEditorTiptapInner(
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- writes the controlled value and cursor into the Tiptap document before paint
   useLayoutEffect(() => {
     latestValueRef.current = value;
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     const initialSelection = !hasAppliedControlledSelectionRef.current;
     hasAppliedControlledSelectionRef.current = true;
     const normalizedCursor = clampEditorCursor(value, cursor);
@@ -1806,7 +1806,7 @@ function ComposerPromptEditorTiptapInner(
   // Reconcile loaded or switched provider skills and models without rebuilding citation node views.
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- replaces skill and model chip nodes in the Tiptap document when the provider skill or model list loads or changes
   useEffect(() => {
-    if (!editor || literalText) return;
+    if (!editor || editor.isDestroyed || literalText) return;
     const replacements = skillChipReplacements(
       editor.state.doc,
       (name) => composerSkillMeta(skills, name),
@@ -1817,12 +1817,12 @@ function ComposerPromptEditorTiptapInner(
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- keeps the mounted editor's visible text anchored while its DOM width changes
   useLayoutEffect(() => {
-    if (editor) return preserveReadingPosition(editor.view.dom);
+    if (editor && !editor.isDestroyed) return preserveReadingPosition(editor.view.dom);
   }, [editor]);
 
   // oxlint-disable-next-line t3code/no-unreasoned-state-sync -- restores ProseMirror focus and caret scroll when the keyed editor remounts, capturing focus on teardown
   useLayoutEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     if (restoreFocusRef.current) {
       restoreFocusRef.current = false;
       editor.view.focus();
@@ -1830,12 +1830,12 @@ function ComposerPromptEditorTiptapInner(
     }
     return () => {
       // Capture focus before the keyed editor's DOM is removed.
-      restoreFocusRef.current = editor.view.hasFocus();
+      if (!editor.isDestroyed) restoreFocusRef.current = editor.view.hasFocus();
     };
   }, [editor, restoreFocusRef]);
 
   const focusAt = (nextCursor: number, exactExpandedCursor?: number) => {
-    if (!editor) return;
+    if (!editor || editor.isDestroyed) return;
     // view.focus() writes selection immediately; bare DOM focus waits 20ms and can misplace fast dictation.
     editor.view.focus();
     if (snapshotRef.current.value !== latestValueRef.current) return;
@@ -1889,10 +1889,10 @@ function ComposerPromptEditorTiptapInner(
         return selectionRangeRef.current;
       },
       captureAttachmentInsertion: () =>
-        editor ? captureComposerAttachmentInsertion(editor) : undefined,
+        editor && !editor.isDestroyed ? captureComposerAttachmentInsertion(editor) : undefined,
       requestCitationComment: (request) => {
         citationRequestRef.current = request;
-        if (!editor) return;
+        if (!editor || editor.isDestroyed) return;
         const map = serializeEditorDoc(editor.state.doc);
         if (map.value !== request.value) return;
         const target = map.runs.find(
@@ -1922,7 +1922,7 @@ function ComposerPromptEditorTiptapInner(
         if (edge === "start" ? beforeCaret.includes("\n") : afterCaret.includes("\n")) {
           return false;
         }
-        const rootElement = editor?.view.dom;
+        const rootElement = editor && !editor.isDestroyed ? editor.view.dom : null;
         const selection = window.getSelection();
         if (
           !rootElement ||
@@ -1950,7 +1950,7 @@ function ComposerPromptEditorTiptapInner(
 
   const handleCopyCut = (event: React.ClipboardEvent, cut: boolean) => {
     const build = buildContextClipboardFragment;
-    if (!editor || (cut && !editor.isEditable)) return;
+    if (!editor || editor.isDestroyed || (cut && !editor.isEditable)) return;
     const clipboardData = event.clipboardData;
     const { from, to } = editor.state.selection;
     if (from === to) return;
@@ -2087,11 +2087,13 @@ function selectMarkdownOffset(editor: TiptapEditor, source: string, offset: numb
 
 /** Native scrolling follows only real input; explicitly reveal programmatically placed carets. */
 function scrollTiptapCaretIntoView(editor: TiptapEditor): void {
+  if (editor.isDestroyed) return;
   editor.view.dispatch(editor.state.tr.scrollIntoView());
 }
 
 /** Scrolls only the editor's own box: a mounting composer must not move the timeline or page. */
 function revealCaretInEditor(editor: TiptapEditor): void {
+  if (editor.isDestroyed) return;
   const scroller = editor.view.dom;
   const caret = editor.view.coordsAtPos(editor.state.selection.head);
   const box = scroller.getBoundingClientRect();

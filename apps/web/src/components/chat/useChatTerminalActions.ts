@@ -134,7 +134,16 @@ export function useChatTerminalActions(input: ChatTerminalActionsInput) {
     threadId: drawerThreadRef?.threadId ?? null,
   });
   const drawerSessionIds = drawerSessions?.map((session) => session.target.terminalId) ?? [];
-  const drawerPanelIds = input.drawerProjectRef ? new Set<string>() : panelTerminalIds;
+  const drawerPanelSurfaces = useRightPanelStore(
+    (store) => selectThreadRightPanelState(store.byThreadKey, drawerThreadRef).surfaces,
+  );
+  const drawerPanelIds = input.drawerProjectRef
+    ? new Set(
+        drawerPanelSurfaces.flatMap((surface) =>
+          surface.kind === "terminal" ? surface.terminalIds : [],
+        ),
+      )
+    : panelTerminalIds;
 
   const activeTerminalGroup =
     terminalUiState.terminalGroups.find(

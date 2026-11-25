@@ -6,11 +6,13 @@ import { useResizeDrag } from "./useResizeDrag";
 import { useStableCallback } from "./useStableCallback";
 
 const WidthSchema = Schema.Finite;
+const sessionWidths = new Map<string, number>();
 
 /** The host must size itself from this custom property. */
 export const RESIZABLE_WIDTH_PROPERTY = "--resizable-width";
 
 export interface UseResizableWidthOptions {
+  readonly persist?: boolean;
   readonly storageKey: string;
   readonly defaultWidth: number;
   readonly minWidth: number;
@@ -33,7 +35,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   readonly setWidth: (width: number) => void;
   readonly handlers: ResizableWidthHandlers;
 } {
-  const { storageKey, defaultWidth, minWidth, maxWidth, edge } = options;
+  const { storageKey, defaultWidth, minWidth, maxWidth, edge, persist = true } = options;
 
   const clamp = (value: number): number => {
     if (!Number.isFinite(value)) return defaultWidth;
@@ -41,6 +43,7 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   };
 
   const readWidth = (): number | null => {
+    if (!persist) return sessionWidths.get(storageKey) ?? null;
     if (typeof window === "undefined") return null;
     try {
       const stored = getLocalStorageItem(storageKey, WidthSchema);
@@ -63,6 +66,10 @@ export function useResizableWidth(options: UseResizableWidthOptions): {
   const commitWidth = (nextStorageKey: string, nextWidth: number) => {
     // Resizing remains usable for this session when browser storage is unavailable.
     setWidthState({ storageKey: nextStorageKey, width: nextWidth });
+    if (!persist) {
+      sessionWidths.set(nextStorageKey, nextWidth);
+      return;
+    }
     try {
       setLocalStorageItem(nextStorageKey, nextWidth, WidthSchema);
     } catch (error) {

@@ -56,11 +56,13 @@ function Launcher(props: { keys: string; received: string[] }) {
 // later registers after it. Tests mount the chat first and add the launcher by rerendering.
 function Chat(props: {
   composerKeys: string[];
+  composerAvailable?: boolean;
   launcher?: { keys: string; received: string[] };
   finds?: string[];
 }) {
   useChatShortcuts({
     enabled: true,
+    composerAvailable: props.composerAvailable ?? true,
     keybindings: [ctrl("f", "chat.find")],
     scriptKeybindings: [],
     getShortcutContext: () => shortcutContext,
@@ -331,6 +333,19 @@ it("leaves keys to a focused video player with controls", async () => {
   expect(composerKeys).toEqual([]);
 
   (document.activeElement as HTMLElement).blur();
+  await userEvent.keyboard("a");
+  expect(composerKeys).toEqual(["a"]);
+});
+
+it("does not redirect typing to a hidden composer while a project surface is selected", async () => {
+  const composerKeys: string[] = [];
+  await using screen = await render(
+    <Chat composerKeys={composerKeys} composerAvailable={false} />,
+    options,
+  );
+  await userEvent.keyboard("hello");
+  expect(composerKeys).toEqual([]);
+  await screen.rerender(<Chat composerKeys={composerKeys} />);
   await userEvent.keyboard("a");
   expect(composerKeys).toEqual(["a"]);
 });

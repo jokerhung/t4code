@@ -1,3 +1,5 @@
+import type { ContextWindowSnapshot } from "@t3tools/client-runtime/state/context-window";
+import type { UsageLimitSourceSnapshots } from "@t3tools/contracts";
 import { copySnapshot } from "./copySnapshot";
 import { VoiceInputSetup } from "./VoiceInputSetup";
 import { useComposerTypingGuard } from "./useComposerTypingGuard";
@@ -373,6 +375,8 @@ export interface ChatComposerHandle {
 }
 
 export interface ChatComposerProps {
+  usageLimitSources?: UsageLimitSourceSnapshots | undefined;
+  contextWindow?: ContextWindowSnapshot | null | undefined;
   composerDraftTarget: ScopedThreadRef | DraftId;
   environmentId: EnvironmentId;
   canOperateThread: boolean;
@@ -2692,6 +2696,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       : expandedControlsIconOnlyBlockCount;
   const composerControls = (
     <ComposerControlsBar
+      contextWindow={props.contextWindow}
+      usageProviders={props.providerStatuses}
+      usageSources={props.usageLimitSources}
       environmentId={environmentId}
       workspaceCwd={gitCwd}
       routeKind={typeof composerDraftTarget === "string" ? "draft" : routeKind}

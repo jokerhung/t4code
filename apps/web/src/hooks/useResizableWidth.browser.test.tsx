@@ -5,9 +5,18 @@ import { RESIZABLE_WIDTH_PROPERTY, useResizableWidth } from "./useResizableWidth
 
 const STORAGE_KEY = "test:responsive-panel-width";
 
-function Panel({ defaultWidth }: { defaultWidth: number }) {
+function Panel({
+  defaultWidth,
+  persist = true,
+  storageKey = STORAGE_KEY,
+}: {
+  defaultWidth: number;
+  persist?: boolean;
+  storageKey?: string;
+}) {
   const { width, setWidth, handlers } = useResizableWidth({
-    storageKey: STORAGE_KEY,
+    storageKey,
+    persist,
     defaultWidth,
     minWidth: 160,
     maxWidth: 560,
@@ -22,6 +31,32 @@ function Panel({ defaultWidth }: { defaultWidth: number }) {
 }
 
 describe("useResizableWidth", () => {
+  it("ignores persisted widths in memory mode while retaining a resize across remounts", async () => {
+    const storageKey = "test:memory-panel-width";
+    const previous = localStorage.getItem(storageKey);
+    localStorage.setItem(storageKey, "500");
+    try {
+      // Width persistence does not depend on navigation.
+      await using screen = await render(
+        <Panel defaultWidth={160} persist={false} storageKey={storageKey} />,
+        { router: false },
+      );
+      expect(screen.container.textContent).toBe("160");
+      await act(() => screen.container.querySelector("button")!.click());
+      expect(screen.container.textContent).toBe("350");
+      await screen.unmount();
+      await using restored = await render(
+        <Panel defaultWidth={160} persist={false} storageKey={storageKey} />,
+        { router: false },
+      );
+      expect(restored.container.textContent).toBe("350");
+      expect(localStorage.getItem(storageKey)).toBe("500");
+    } finally {
+      if (previous === null) localStorage.removeItem(storageKey);
+      else localStorage.setItem(storageKey, previous);
+    }
+  });
+
   it("follows a responsive default until the user saves a width", async () => {
     const previous = localStorage.getItem(STORAGE_KEY);
     localStorage.removeItem(STORAGE_KEY);
