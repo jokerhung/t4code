@@ -136,6 +136,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   /* Horizontal gutter shared by the page header and the chat column, clear of
      the device's safe area. */
   --workspace-gutter: 0.75rem;
+  --workspace-safe-start: env(safe-area-inset-left);
   --workspace-gutter-start: calc(env(safe-area-inset-left) + var(--workspace-gutter));
   --workspace-gutter-end: calc(env(safe-area-inset-right) + var(--workspace-gutter));
 

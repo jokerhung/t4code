@@ -244,6 +244,9 @@ export function useRightPanelActions(input: RightPanelActionsInput) {
       return;
     }
     useRightPanelStore.getState().toggleVisibility(activeThreadRef);
+    if (activeProject) {
+      useRightPanelStore.getState().ensureFilesSurface(activeThreadRef);
+    }
     focusActivePanelTerminal(activeThreadRef);
   };
   const toggleRightPanelStable = useStableCallback(toggleRightPanel);

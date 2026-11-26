@@ -1,6 +1,7 @@
-import { useEffect, useRef, type MouseEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import {
   AuthOrchestrationOperateScope,
+  type ContextMenuItem,
   type ScopedProjectRef,
   type ThreadId,
 } from "@t3tools/contracts";
@@ -8,10 +9,22 @@ import type {
   EnvironmentProject,
   EnvironmentThreadShell,
 } from "@t3tools/client-runtime/state/shell";
+import { scopeThreadRef } from "@t3tools/client-runtime/environment";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
+import { useAtomValue } from "@effect/atom-react";
 import { T, useGT } from "gt-react";
 import { Globe2Icon, MessageSquareIcon, PlusIcon, TerminalIcon, XIcon } from "lucide-react";
 import { useQuietThreadShells } from "../../state/entities";
 import { useEnvironmentScope } from "../../state/session";
+import { threadEnvironment } from "../../state/threads";
+import { useOrchestrationCommand } from "../../state/use-orchestration-command";
+import { useThreadActionMenu } from "../../hooks/useThreadActionMenu";
+import { resolveRenameCommit } from "../threadActionMenu.logic";
+import { toastManager } from "../ui/toast";
+import { canShareWithGuestAtom } from "./guestShareAvailability";
 import { Button } from "../ui/button";
 import {
   Menu,
@@ -99,76 +112,127 @@ export function ProjectWorkspaceTabs(props: {
     props.workspace.showThread();
     if (id !== props.threadId) props.onOpenThread(id);
   };
-  const contextMenu = async (event: MouseEvent, target: WorkspacePaneTarget) => {
+  const canShareWithGuest = useAtomValue(canShareWithGuestAtom(props.project.environmentId));
+  const [renaming, setRenaming] = useState<{ threadId: ThreadId; title: string } | null>(null);
+  const updateThreadMetadata = useOrchestrationCommand(threadEnvironment.updateMetadata, {
+    reportFailure: false,
+  });
+  const threadMenu = useThreadActionMenu({
+    threadRef: null,
+    projectCwd: props.project.workspaceRoot,
+    onStartRename: ({ threadId }) => {
+      const thread = tabs.find((tab) => tab.id === threadId);
+      if (thread) setRenaming({ threadId, title: thread.title });
+    },
+    canShareWithGuest,
+  });
+  const commitRename = async (threadId: ThreadId, originalTitle: string, title: string) => {
+    setRenaming(null);
+    const resolution = resolveRenameCommit({ title, originalTitle });
+    if (resolution.action === "reject-empty") {
+      toastManager.add({ type: "warning", title: gt("Thread title cannot be empty") });
+      return;
+    }
+    if (resolution.action === "noop") return;
+    const result = await updateThreadMetadata({
+      environmentId: props.project.environmentId,
+      input: { threadId, title: resolution.title },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add({
+        type: "error",
+        title: gt("Failed to rename thread"),
+        description: error instanceof Error ? error.message : gt("An error occurred."),
+      });
+    }
+  };
+  const contextMenu = (event: MouseEvent, target: WorkspacePaneTarget) => {
     event.preventDefault();
     event.stopPropagation();
-    const action = await readLocalApi()?.contextMenu.show(
-      [
-        {
-          id: "split",
-          label: gt("Split"),
-          disabled:
-            target.kind === "thread" &&
-            !projectThreads.some((thread) => thread.id === target.threadId),
-          children: [
-            { id: "maximize", label: gt("Maximize"), detail: "100%" },
-            { id: "half", label: "1/2", detail: "50%" },
-            { id: "third", label: "1/3", detail: "33%" },
-            { id: "quarter", label: "1/4", detail: "25%" },
-            { id: "auto", label: gt("Auto Fit"), detail: gt("Auto") },
-            { id: "hide", label: gt("Hide panel"), separatorBefore: true },
-          ],
-        },
-        { id: "right", label: gt("Split right"), separatorBefore: true },
-        { id: "down", label: gt("Split down") },
-        { id: "close-split", label: gt("Close split"), disabled: !props.workspace.split },
-      ],
-      { x: event.clientX, y: event.clientY },
-      contextMenuSourceOf(event),
-    );
-    if (action === "maximize") {
-      props.workspace.closeSplit();
-      if (target.kind === "thread") {
-        props.workspace.showThread();
-        if (target.threadId !== props.threadId) props.onOpenThread(target.threadId);
-      } else {
-        const surface = props.workspace.surfaces.find((surface) => surface.id === target.surfaceId);
-        if (surface) props.workspace.selectSurface(surface);
-      }
-    } else if (
-      action === "half" ||
-      action === "third" ||
-      action === "quarter" ||
-      action === "auto" ||
-      action === "right" ||
-      action === "down"
-    ) {
-      if (
-        target.kind === "thread" &&
-        target.threadId === props.threadId &&
-        !props.workspace.activeSurface
+    const position = { x: event.clientX, y: event.clientY };
+    const source = contextMenuSourceOf(event);
+    const items: ReadonlyArray<ContextMenuItem<string>> = [
+      {
+        id: "split",
+        label: gt("Split"),
+        disabled:
+          target.kind === "thread" &&
+          !projectThreads.some((thread) => thread.id === target.threadId),
+        children: [
+          { id: "maximize", label: gt("Maximize"), detail: "100%" },
+          { id: "half", label: "1/2", detail: "50%" },
+          { id: "third", label: "1/3", detail: "33%" },
+          { id: "quarter", label: "1/4", detail: "25%" },
+          { id: "auto", label: gt("Auto Fit"), detail: gt("Auto") },
+          { id: "hide", label: gt("Hide panel"), separatorBefore: true },
+        ],
+      },
+      { id: "right", label: gt("Split right"), separatorBefore: true },
+      { id: "down", label: gt("Split down") },
+      { id: "close-split", label: gt("Close split"), disabled: !props.workspace.split },
+    ];
+    const apply = (action: string | null | undefined) => {
+      if (action === "maximize") {
+        props.workspace.closeSplit();
+        if (target.kind === "thread") {
+          props.workspace.showThread();
+          if (target.threadId !== props.threadId) props.onOpenThread(target.threadId);
+        } else {
+          const surface = props.workspace.surfaces.find(
+            (surface) => surface.id === target.surfaceId,
+          );
+          if (surface) props.workspace.selectSurface(surface);
+        }
+      } else if (
+        action === "half" ||
+        action === "third" ||
+        action === "quarter" ||
+        action === "auto" ||
+        action === "right" ||
+        action === "down"
       ) {
-        const other = tabs.find((tab) => tab.id !== target.threadId);
-        if (other) props.onOpenThread(other.id);
-      }
-      props.workspace.splitTab(
-        target,
-        action === "down" || action === "right"
-          ? action
-          : (props.workspace.split?.direction ?? "right"),
-        action === "third"
-          ? 100 - 100 / 3
-          : action === "quarter"
-            ? 75
-            : action === "down" || action === "right"
-              ? (props.workspace.split?.ratio ?? 50)
-              : 50,
-      );
-    } else if (action === "hide" || action === "close-split") props.workspace.closeSplit();
+        if (
+          target.kind === "thread" &&
+          target.threadId === props.threadId &&
+          !props.workspace.activeSurface
+        ) {
+          const other = tabs.find((tab) => tab.id !== target.threadId);
+          if (other) props.onOpenThread(other.id);
+        }
+        props.workspace.splitTab(
+          target,
+          action === "down" || action === "right"
+            ? action
+            : (props.workspace.split?.direction ?? "right"),
+          action === "third"
+            ? 100 - 100 / 3
+            : action === "quarter"
+              ? 75
+              : action === "down" || action === "right"
+                ? (props.workspace.split?.ratio ?? 50)
+                : 50,
+        );
+      } else if (action === "hide" || action === "close-split") props.workspace.closeSplit();
+    };
+    // Draft and resource tabs have no stored thread, so they only offer the split entries.
+    if (
+      target.kind === "thread" &&
+      projectThreads.some((thread) => thread.id === target.threadId)
+    ) {
+      threadMenu.openMenu(position, source, {
+        threadRef: scopeThreadRef(props.project.environmentId, target.threadId),
+        extra: { items, onSelect: apply },
+      });
+    } else {
+      void readLocalApi()?.contextMenu.show(items, position, source).then(apply);
+    }
   };
   return (
+    // The rule is anchored to the chat header, not this strip, so it crosses the header's padding.
+    // The transparent border keeps the tabs' own underline just above it.
     <div
-      className="flex h-8 min-w-0 flex-1 items-stretch border-b border-border [-webkit-app-region:no-drag]"
+      className="flex h-8 min-w-0 flex-1 items-stretch border-b border-transparent [-webkit-app-region:no-drag] after:pointer-events-none after:absolute after:inset-x-0 after:top-[calc(50%+1rem-1px)] after:h-px after:bg-border"
       data-project-workspace-tabs
     >
       <div className="flex shrink-0 items-center border-r border-border px-1">
@@ -255,22 +319,36 @@ export function ProjectWorkspaceTabs(props: {
               title={thread.title}
               selected={selected}
               inSplit={inSplit}
-              onClick={() => openThread(thread.id)}
-              onContextMenu={(event) =>
-                void contextMenu(event, { kind: "thread", threadId: thread.id })
+              rename={
+                renaming?.threadId === thread.id && canCreateThread
+                  ? {
+                      title: renaming.title,
+                      label: gt("Thread title"),
+                      onCommit: (title) => void commitRename(thread.id, renaming.title, title),
+                      onCancel: () => setRenaming(null),
+                    }
+                  : undefined
               }
+              onClick={() => openThread(thread.id)}
+              onContextMenu={(event) => contextMenu(event, { kind: "thread", threadId: thread.id })}
             >
+              {/* The padding enlarges the dot's click target without moving the title. */}
               <span
-                className={
-                  thread.status === "working" || thread.status === "preparing"
-                    ? "size-1.5 shrink-0 rounded-full bg-success"
-                    : thread.status === "waiting" ||
-                        thread.status === "approval" ||
-                        thread.status === "input"
-                      ? "size-1.5 shrink-0 rounded-full bg-warning"
-                      : "size-1.5 shrink-0 rounded-full bg-muted-foreground/50"
-                }
-              />
+                data-tab-menu-trigger
+                className="group/dot -mr-2 -ml-3 flex h-full shrink-0 items-center pr-2 pl-3"
+              >
+                <span
+                  className={`size-3 rounded-full ring-ring/40 group-hover/dot:ring-3 ${
+                    thread.status === "working" || thread.status === "preparing"
+                      ? "bg-success"
+                      : thread.status === "waiting" ||
+                          thread.status === "approval" ||
+                          thread.status === "input"
+                        ? "bg-warning"
+                        : "bg-muted-foreground/50"
+                  }`}
+                />
+              </span>
             </WorkspaceTab>
           );
         })}
@@ -293,7 +371,7 @@ export function ProjectWorkspaceTabs(props: {
                 if (primaryId && primaryId !== props.threadId) props.onOpenThread(primaryId);
               }}
               onContextMenu={(event) =>
-                void contextMenu(event, { kind: "surface", surfaceId: surface.id })
+                contextMenu(event, { kind: "surface", surfaceId: surface.id })
               }
               close={
                 <PanelTabCloseButton
@@ -322,7 +400,47 @@ function WorkspaceTab(props: {
   onContextMenu: (event: MouseEvent) => void;
   children: ReactNode;
   close?: ReactNode;
+  rename?:
+    | {
+        title: string;
+        label: string;
+        onCommit: (title: string) => void;
+        onCancel: () => void;
+      }
+    | undefined;
 }) {
+  // Enter and Escape unmount the input, and a blur that follows must not commit again.
+  const renameSettled = useRef(false);
+  const { rename } = props;
+  if (rename) {
+    return (
+      <div className="flex h-full w-52 shrink-0 items-center border-r border-border px-2">
+        <input
+          autoFocus
+          dir="auto"
+          aria-label={rename.label}
+          className="min-w-0 flex-1 rounded-sm bg-transparent text-xs text-foreground outline-none ring-1 ring-inset ring-ring/50 focus:ring-ring"
+          defaultValue={rename.title}
+          onFocus={(event) => {
+            renameSettled.current = false;
+            event.currentTarget.select();
+          }}
+          onBlur={(event) => {
+            if (!renameSettled.current) rename.onCommit(event.currentTarget.value);
+          }}
+          onContextMenu={(event) => event.stopPropagation()}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
+            if (event.key !== "Enter" && event.key !== "Escape") return;
+            event.preventDefault();
+            renameSettled.current = true;
+            if (event.key === "Enter") rename.onCommit(event.currentTarget.value);
+            else rename.onCancel();
+          }}
+        />
+      </div>
+    );
+  }
   return (
     <div
       className={`group/tab relative flex h-full max-w-52 min-w-24 shrink-0 items-center border-r border-border ${props.selected ? "bg-muted/65 text-foreground" : "text-muted-foreground hover:bg-muted/35"}`}
@@ -336,7 +454,13 @@ function WorkspaceTab(props: {
               data-workspace-tab={props.id}
               aria-selected={props.selected}
               tabIndex={props.selected ? 0 : -1}
-              onClick={props.onClick}
+              onClick={(event) => {
+                const onMenuTrigger =
+                  event.target instanceof Element &&
+                  event.target.closest("[data-tab-menu-trigger]");
+                if (onMenuTrigger) props.onContextMenu(event);
+                else props.onClick();
+              }}
               onContextMenu={props.onContextMenu}
               className="flex h-full min-w-0 flex-1 cursor-pointer items-center gap-2 px-3 text-xs outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             />

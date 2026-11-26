@@ -1395,3 +1395,24 @@ describe("rightPanelStore", () => {
     expect(store.getUserActionRevision(refA)).toBe(revision);
   });
 });
+
+describe("ensureFilesSurface", () => {
+  const ref = scopeThreadRef(EnvironmentId.make("local"), ThreadId.make("ensure-files"));
+  const current = () => selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, ref);
+
+  it("selects Files in an empty panel and adds it only once", () => {
+    useRightPanelStore.getState().ensureFilesSurface(ref);
+    useRightPanelStore.getState().ensureFilesSurface(ref);
+    expect(current().surfaces.map((surface) => surface.id)).toEqual(["files"]);
+    expect(current().activeSurfaceId).toBe("files");
+  });
+
+  it("keeps the selected tab when adding Files behind it", () => {
+    const other = scopeThreadRef(EnvironmentId.make("local"), ThreadId.make("ensure-behind"));
+    useRightPanelStore.getState().open(other, "diff");
+    useRightPanelStore.getState().ensureFilesSurface(other);
+    const state = selectThreadRightPanelState(useRightPanelStore.getState().byThreadKey, other);
+    expect(state.surfaces.map((surface) => surface.id)).toEqual(["diff", "files"]);
+    expect(state.activeSurfaceId).toBe("diff");
+  });
+});

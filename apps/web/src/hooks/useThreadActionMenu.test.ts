@@ -194,3 +194,30 @@ describe("thread menu permissions", () => {
     expect(onFind).toHaveBeenCalledExactlyOnceWith(target);
   });
 });
+
+describe("thread menu for another surface", () => {
+  it("targets the given thread and keeps the caller's entries apart from thread actions", async () => {
+    state.granted.add("secondary");
+    state.show.mockResolvedValue("half" as ThreadActionMenuId);
+    const onSelect = vi.fn(() => recordEffect("extra"));
+    useThreadActionMenu({
+      threadRef: null,
+      projectCwd: "/project",
+      onStartRename: () => {},
+      canShareWithGuest: false,
+    }).openMenu(position, "mouse", {
+      threadRef: target,
+      extra: {
+        items: [{ id: "split", label: "Split", children: [{ id: "half", label: "1/2" }] }],
+        onSelect,
+      },
+    });
+    await state.completed.promise;
+    const ids: string[] = state.show.mock.calls[0]![0].map((item) => item.id);
+    expect(ids[0]).toBe("split");
+    expect(ids).toContain("rename");
+    expect(ids.at(-1)).toBe("delete");
+    expect(onSelect).toHaveBeenCalledExactlyOnceWith("half");
+    expect(state.effects).toEqual(["extra"]);
+  });
+});

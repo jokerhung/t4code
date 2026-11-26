@@ -28,6 +28,7 @@ import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { useThreadActionMenu } from "~/hooks/useThreadActionMenu";
+import { resolveRenameCommit } from "../threadActionMenu.logic";
 import { readLocalApi } from "~/localApi";
 import { threadEnvironment } from "../../state/threads";
 import { canShareWithGuestAtom } from "./guestShareAvailability";
@@ -61,16 +62,6 @@ interface ChatHeaderProps {
   onNewThreadInProject: () => void;
   onOpenProjectSettings?: (() => void) | undefined;
   onFindInThread?: ((threadRef: ScopedThreadRef) => void) | undefined;
-}
-
-function resolveRenameCommit(input: {
-  readonly title: string;
-  readonly originalTitle: string;
-}): { action: "commit"; title: string } | { action: "reject-empty" } | { action: "noop" } {
-  const trimmed = input.title.trim();
-  if (trimmed.length === 0) return { action: "reject-empty" };
-  if (trimmed === input.originalTitle) return { action: "noop" };
-  return { action: "commit", title: trimmed };
 }
 
 export const ChatHeader = memo(function ChatHeader({

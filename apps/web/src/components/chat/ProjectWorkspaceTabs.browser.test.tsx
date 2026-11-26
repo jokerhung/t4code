@@ -18,6 +18,21 @@ vi.mock(import("../../localApi"), async (importOriginal) => {
   };
 });
 
+// The hook's own test covers the thread entries; this stand-in shows the tabs' entries only.
+vi.mock(import("../../hooks/useThreadActionMenu"), () => ({
+  useThreadActionMenu: () => ({
+    openMenu: (position, source, options) => {
+      void showContextMenu(options?.extra?.items, position, source).then(
+        (action: string | undefined) => action && options?.extra?.onSelect(action),
+      );
+    },
+    closeMenu: () => {},
+  }),
+}));
+vi.mock(import("../../state/use-orchestration-command"), () => ({
+  useOrchestrationCommand: () => vi.fn(),
+}));
+
 const data = vi.hoisted(() => ({ threads: [] as ReturnType<typeof makeThreadFixture>[] }));
 vi.mock(import("../../state/entities"), () => ({ useQuietThreadShells: () => data.threads }));
 vi.mock(import("../../state/session"), () => ({ useEnvironmentScope: () => true }));
@@ -190,6 +205,31 @@ it("splits a thread from its context menu and keeps another thread in the primar
     ),
   );
   expect(open).toHaveBeenCalledWith(newer.id);
+});
+
+it("opens the tab context menu from the status dot without switching threads", async () => {
+  data.threads = [older, newer];
+  showContextMenu.mockResolvedValueOnce("close-split");
+  const state = workspace();
+  const open = vi.fn();
+  await using screen = await render(
+    <ProjectWorkspaceTabs
+      project={project}
+      threadId={older.id}
+      threadTitle={older.title}
+      workspace={state}
+      onOpenThread={open}
+      onNewThread={() => {}}
+    />,
+  );
+  const dot = screen
+    .getByRole("tab", { name: "Newer" })
+    .element()
+    .querySelector("[data-tab-menu-trigger]")!;
+  await userEvent.click(dot);
+  await vi.waitFor(() => expect(state.closeSplit).toHaveBeenCalledOnce());
+  expect(open).not.toHaveBeenCalled();
+  expect(state.showThread).not.toHaveBeenCalled();
 });
 
 it("selects split and primary thread tabs without closing or resizing the split", async () => {

@@ -257,6 +257,8 @@ interface RightPanelStoreState {
   close: (ref: ScopedThreadRef) => void;
   setMaximized: (ref: ScopedThreadRef, maximized: boolean) => void;
   toggleVisibility: (ref: ScopedThreadRef) => void;
+  /** Adds the Files tab if missing. It is selected only when no other tab is. */
+  ensureFilesSurface: (ref: ScopedThreadRef) => void;
   toggle: (
     ref: ScopedThreadRef,
     kind: Exclude<
@@ -1308,6 +1310,12 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             ...current,
             isOpen: !current.isOpen,
           })),
+        ),
+      ensureFilesSurface: (ref) =>
+        set((state) =>
+          userAction(state, scopedThreadKey(ref), (current) =>
+            upsertSurface(current, singletonSurface("files"), current.activeSurfaceId === null),
+          ),
         ),
       toggle: (ref, kind) =>
         set((state) =>
